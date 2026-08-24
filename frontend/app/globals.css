@@ -1,0 +1,171 @@
+@import "tailwindcss";
+
+/*
+ * Editorial theme, in two palettes.
+ *
+ * The signatures worth getting right, in order of how much they carry the look:
+ *   1. Zero border radius. Every element, without exception -- sharp corners
+ *      are most of the editorial character, and one rounded card breaks it.
+ *   2. A warm ground, never pure white or pure black.
+ *   3. A single vivid orange-red used sparingly and confidently.
+ *   4. Large display type at light weight with negative tracking, rather than
+ *      the usual big-and-bold.
+ *   5. A serif (Noticia Text) reserved for editorial asides, never for UI.
+ *
+ * Dark is the default because the assistant is a long-session reading surface:
+ * the thread accumulates, and a cream page at full height is the brighter of
+ * the two by a wide margin. Light remains a first-class palette, reachable
+ * from the toggle in the header and persisted per browser.
+ *
+ * Both palettes are defined as the same token set, so every component styles
+ * against semantic names (`bg-surface`, `text-muted`) and never against a
+ * literal colour. Adding a palette therefore touches only this file.
+ */
+
+/* Dark: the default. Warm-neutral rather than blue-black, to stay in the same
+   family as the cream ground rather than reading as a different product. */
+:root {
+  color-scheme: dark;
+
+  --background: #131211;
+  --surface: #1a1917;
+  --surface-muted: #211f1c;
+  --foreground: #f2ece1;
+  --muted: #9c958a;
+  --border: #322e29;
+
+  --accent: #ff4a30;
+  --accent-contrast: #ffffff;
+  --accent-soft: #2b1512;
+
+  /* Lifted from the light palette's #733534, which is unreadable on a dark
+     ground. Used for cautions, so legibility matters more than exact hue. */
+  --maroon: #e08a86;
+  --teal: #9fc9cb;
+}
+
+/* Light: the original cream palette, applied only on explicit opt-in. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --background: #fcf9f3;
+  --surface: #ffffff;
+  --surface-muted: #fcfdf3;
+  --foreground: #1c1c1c;
+  --muted: #6b6862;
+  --border: #e4dfd3;
+
+  --accent: #ff3d22;
+  --accent-contrast: #ffffff;
+  --accent-soft: #fdeae6;
+
+  --maroon: #733534;
+  --teal: #9fc9cb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-maroon: var(--maroon);
+  --color-teal: var(--teal);
+
+  --font-sans: var(--font-geist-sans);
+  --font-serif: var(--font-noticia);
+
+  /* Every radius token collapses to zero so no stray `rounded-*` class can
+     reintroduce a curve. */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
+  --radius-full: 0px;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    "SF Pro Display", -apple-system, var(--font-sans), system-ui, "Helvetica Neue",
+    Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Display type: large, light, tightly tracked -- the headline voice. */
+.display {
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+}
+
+/* Editorial serif, for asides and pull-quotes only. */
+.editorial {
+  font-family: var(--font-noticia), Georgia, "Times New Roman", serif;
+  font-weight: 400;
+}
+
+/* Small structural label, as used for section eyebrows. */
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
+/*
+ * Entrance motion animates transform only -- never opacity.
+ *
+ * Anything that fades in from opacity:0 is invisible whenever the animation
+ * does not progress: a backgrounded tab pauses animations, and a paused
+ * animation still applies its 0% frame. That left a fully-populated results
+ * view rendering as a blank page. Sliding without fading keeps the entrance
+ * while making content visible unconditionally.
+ */
+@keyframes rise {
+  from {
+    transform: translateY(10px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.animate-rise {
+  animation: rise 0.4s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+@keyframes sweep {
+  from {
+    transform: scaleX(0.02);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.animate-sweep {
+  transform-origin: left;
+  animation: sweep 0.6s cubic-bezier(0.2, 0.7, 0.3, 1) infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise,
+  .animate-sweep {
+    animation: none;
+  }
+}
+
+/* The thread scrolls inside its own column; keep the scrollbar from repainting
+   the warm ground with the browser's default grey. */
+.thread-scroll {
+  scrollbar-color: var(--border) transparent;
+  scrollbar-width: thin;
+}

@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+.ruff_cache/
+
+# Intermediate build artefacts. The *final* catalogue, its embedding matrix and
+# the taxonomy ARE committed, so a fresh clone runs with semantic retrieval
+# intact and with the index guaranteed to match the products it was built from.
+data/products_normalized.json
+data/products_enriched.json
+data/products.pre_reclassify.json
+data/.enrich_batch.json

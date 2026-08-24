@@ -1,0 +1,19 @@
+# OS
+.DS_Store
+
+# Dependencies / build output
+node_modules/
+.next/
+.venv/
+__pycache__/
+
+# Secrets
+.env
+.env.local
+
+# Agent + editor tooling
+.claude/
+
+# Personal notes live outside the repo
+docs/
+NEXT_SESSION_PROMPT.md
