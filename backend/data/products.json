@@ -3625,10 +3625,10 @@
       "material": null,
       "temp_rating_c": null,
       "is_giftable": true,
-      "water_resistance": "none",
-      "layer": "standalone",
+      "water_resistance": null,
+      "layer": null,
       "formality": "formal",
-      "breathability": "low"
+      "breathability": null
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -4102,9 +4102,9 @@
       "temp_rating_c": null,
       "is_giftable": false,
       "water_resistance": "none",
-      "layer": "standalone",
-      "formality": "smart_casual",
-      "breathability": "low"
+      "layer": null,
+      "formality": "casual",
+      "breathability": "high"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -7282,7 +7282,7 @@
       "temp_rating_c": 5,
       "is_giftable": false,
       "water_resistance": "none",
-      "layer": "standalone",
+      "layer": "base",
       "formality": "casual",
       "breathability": "medium"
     },
@@ -8110,7 +8110,11 @@
       ],
       "material": null,
       "temp_rating_c": null,
-      "is_giftable": true
+      "is_giftable": true,
+      "water_resistance": "none",
+      "layer": "standalone",
+      "formality": "casual",
+      "breathability": null
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -8144,7 +8148,11 @@
       ],
       "material": null,
       "temp_rating_c": null,
-      "is_giftable": false
+      "is_giftable": false,
+      "water_resistance": "none",
+      "layer": "standalone",
+      "formality": "casual",
+      "breathability": null
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -8178,7 +8186,11 @@
       ],
       "material": "cotton",
       "temp_rating_c": null,
-      "is_giftable": false
+      "is_giftable": false,
+      "water_resistance": "none",
+      "layer": "standalone",
+      "formality": "casual",
+      "breathability": "high"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -8212,7 +8224,11 @@
       ],
       "material": "cotton",
       "temp_rating_c": null,
-      "is_giftable": false
+      "is_giftable": false,
+      "water_resistance": "none",
+      "layer": "standalone",
+      "formality": "casual",
+      "breathability": "high"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
