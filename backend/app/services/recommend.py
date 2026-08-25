@@ -225,14 +225,32 @@ def _fresh_response(cached: RecommendResponse, *, latency_ms: int) -> RecommendR
 
 
 def _cache_and_return(key: str, response: RecommendResponse) -> RecommendResponse:
-    """Store a completed response, unless it was produced without full reasoning.
+    """Store a completed response, unless it looks transient.
 
-    Degraded answers are deliberately not cached: they are the product of a
-    transient failure, and caching one would keep serving the weaker result for
-    half an hour after the cause cleared.
+    Two kinds of answer are deliberately not cached, for the same reason:
+    caching one keeps serving it long after the cause has cleared.
+
+    **Degraded answers** are the product of a provider failure.
+
+    **Results that filled nothing** are the product of an unlucky plan. Seen in
+    production on the flagship trek query: the model produced buckets nothing
+    could fill, returning 0 groups and 9 unfilled slots -- and rewording the
+    same request returned 9 populated groups, so the catalogue was never the
+    problem. Because the empty answer was cached, every later run of that exact
+    wording served it back, turning one bad roll of the dice into a permanent
+    wrong answer.
+
+    A clarify turn is exempt: it legitimately has no groups yet because it is
+    asking a question, not failing to answer one.
     """
-    if not response.meta.degraded_mode:
-        response_cache.set(key, response)
+    filled_nothing = (
+        response.mode == "results"
+        and not response.groups
+        and bool(response.unfilled_slots)
+    )
+    if response.meta.degraded_mode or filled_nothing:
+        return response
+    response_cache.set(key, response)
     return response
 
 
