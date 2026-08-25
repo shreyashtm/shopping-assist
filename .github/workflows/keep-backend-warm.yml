@@ -1,0 +1,19 @@
+name: Keep Render backend warm
+
+# Render's free tier spins the service down after ~15 minutes of no traffic;
+# the next request then pays a full cold boot (Python + torch +
+# sentence-transformers + catalogue load), which can take a minute or more.
+# Pinging /api/v1/health well inside that window keeps it always warm at $0
+# cost, at the price of ~144 tiny requests/day against GitHub's free Actions
+# minutes.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping backend health endpoint
+        run: curl -f -s -m 30 https://shopping-assist-twlq.onrender.com/api/v1/health
