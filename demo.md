@@ -1,6 +1,7 @@
 # Demo
 
-The project is currently local only. There is no live application URL yet.
+The app is live at <https://shopping-assist-iota.vercel.app>. It can also be
+run locally -- see [setup.md](setup.md).
 
 ## Suggested Video Flow
 
@@ -41,4 +42,10 @@ Find me traditional wear for my friend's wedding.
 
 ## Deployment Status
 
-Not deployed yet. Future deployment work is listed in [scope.md](scope.md).
+Live:
+
+- App: <https://shopping-assist-iota.vercel.app>
+- API: <https://shopping-assist-production.up.railway.app>
+
+Frontend on Vercel, backend on Railway. Setup steps and the reasoning behind
+the platform choices are in [DEPLOYMENT.md](DEPLOYMENT.md).

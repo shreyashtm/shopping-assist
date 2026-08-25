@@ -369,6 +369,6 @@ The important constraints are tracked in [scope.md](scope.md):
 - overlapping bucket paths can be thinned too much by dedupe
 - clarification budget options need taxonomy price-range awareness
 - latency is dominated by interpretation
-- there is no deployment or CI configuration yet
+- both services are deployed (Vercel + Railway), but there is no CI pipeline yet
 
 Those are product and scale constraints, not hidden runtime dependencies.

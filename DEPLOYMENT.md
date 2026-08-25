@@ -1,7 +1,39 @@
 # Deployment
 
-Manual steps to take the project live. Nothing here has been executed —
-this is a guide for you to run through yourself.
+**Current state — both services are live:**
+
+| Surface | Platform | URL |
+|---|---|---|
+| Frontend | Vercel | <https://shopping-assist-iota.vercel.app> |
+| Backend | Railway | <https://shopping-assist-production.up.railway.app> |
+
+Both auto-deploy from `main`. The rest of this document is the runbook for
+reproducing that setup (or moving it elsewhere), plus the reasoning behind each
+platform choice.
+
+## What actually went wrong the first time
+
+Recorded because these cost real debugging time and none of them are obvious
+from a green build log:
+
+- **The backend was first deployed to Render's free tier (512 MB) and it did
+  not hold up.** Health checks intermittently took 14s or timed out entirely
+  under `torch` + `sentence-transformers`. Moved to Railway, whose trial tier
+  gives 1 GB. See the RAM note below.
+- **A trailing slash in `CORS_ORIGINS` silently rejected every browser
+  request.** Browser `Origin` headers never carry a trailing slash and
+  Starlette matches exactly. Fixed in `cors_origin_list` (`app/core/config.py`),
+  which now strips it -- but the symptom was an unhelpful "Could not reach the
+  assistant" in the UI with a CORS error only visible in the browser console.
+- **`INTERPRET_MODEL` must match the selected provider.** An Anthropic model id
+  under `LLM_PROVIDER=openrouter` fails every call and silently degrades the
+  app to keyword matching. There is no cross-provider default.
+- **Env var changes need a redeploy.** Vercel bakes `NEXT_PUBLIC_*` in at build
+  time, so saving a variable does nothing until you rebuild. Railway does not
+  always auto-redeploy on a variable change either -- check the Deployments tab.
+- **Railway needs the root directory set to `backend`.** Otherwise its builder
+  analyses the repo root, finds no Python project, and fails with "could not
+  determine how to build the app".
 
 ## Before you start: two things worth knowing
 
@@ -13,35 +45,63 @@ typically cap memory well below what this needs — use a platform that runs a
 persistent container (Render, Railway, Fly.io, a VPS). Budget **at least 1 GB
 RAM**; a 512 MB free tier will likely OOM on startup.
 
-**Nothing is pushed to a remote yet.** The repo has one local commit (the
-scaffold) and a large uncommitted working tree — all of `backend/app/`,
-`backend/data/`, `backend/scripts/`, `backend/tests/`, `frontend/app/`,
-`frontend/components/`, `frontend/lib/`, and the doc files. Step 1 below
-covers this.
+**Latency is dominated by which interpretation model you configure**, not by
+the app's own work. A fast hosted model interprets in ~2-4s; a free-tier model
+measured 37-67s and failed roughly half the time. Set `LLM_PROVIDER` to a fast
+model and keep the free one as `LLM_FALLBACK_PROVIDER`, not the reverse. See
+[scope.md](scope.md#latency) for the measurements.
 
 ---
 
-## 1. Commit and push
+## 1. Backend — Railway (the current deployment)
 
-```bash
-cd /Users/shreyash/PROJECTS/confluxe-assignment
-git add -A
-git status                 # review what's staged before committing
-git commit -m "feat: complete recommendation pipeline, catalogue, frontend, docs"
-```
+Web-dashboard flow, no CLI or login needed.
 
-Create a GitHub repo (via the GitHub website, or `gh repo create` if you have
-the CLI), then:
+1. Go to <https://railway.app> → **New Project** → **Deploy from GitHub repo**
+   → select this repo.
+2. Service Settings → **Root Directory**: `backend`. Not optional — without it
+   the builder analyses the repo root, finds no Python project, and fails.
+3. Service Settings → **Build**:
+   - Build command: `pip install uv && uv sync --extra dev --no-dev`
+   - Start command: `uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
-```bash
-git remote add origin <your-repo-url>
-git push -u origin main
-```
+   Railway injects `$PORT`; bind to it, not to 8000. Its Python auto-detection
+   does not understand `uv`-managed projects, so set both commands explicitly.
+4. **Variables** tab:
 
-## 2. Backend — Render (recommended)
+   | Key | Value |
+   |---|---|
+   | `LLM_PROVIDER` | `anthropic` (fast) or `openrouter` (free but slow — see the latency note above) |
+   | `INTERPRET_MODEL` | a model id valid for *that* provider, e.g. `claude-haiku-4-5` |
+   | `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY` | whichever the provider needs |
+   | `LLM_FALLBACK_PROVIDER` | optional second provider, must differ from the primary |
+   | `FALLBACK_INTERPRET_MODEL` | required if a fallback is set — a model id for the *fallback's* provider |
+   | `CORS_ORIGINS` | the Vercel URL from step 2, e.g. `https://your-project.vercel.app` |
 
-Render runs a persistent container, has a straightforward free/starter path,
-and needs no config file for a project this size.
+5. Settings → **Networking** → **Generate Domain**. Railway assigns no public
+   URL until you ask for one — the `*.railway.internal` address it shows by
+   default is private and unreachable from a browser.
+6. Confirm:
+   ```bash
+   curl https://your-service.up.railway.app/api/v1/health
+   ```
+   Check `catalogue_loaded: true`, `embeddings_ready: true`, and
+   `llm_configured: true`. If `interpret_model` in that response is not the
+   value you set, the variables did not take effect — redeploy.
+
+**RAM**: Railway's 30-day trial gives 1 GB and shared vCPU on a one-time $5
+credit — a 24/7 backend will likely exhaust that credit well before 30 days.
+The ongoing Free plan afterwards drops to 0.5 GB, the same ceiling that made
+Render's free tier unusable here. The Hobby plan (~$5/month + usage) is the
+real answer if this needs to stay up.
+
+## 2. Alternative backend — Render
+
+Also a persistent container, and needs no config file for a project this size.
+Used for this project's first deployment; **its 512 MB free tier could not run
+this workload** (intermittent 14s health checks and timeouts under `torch` +
+`sentence-transformers`), so budget for the paid Starter tier if you go this
+route.
 
 1. Go to <https://dashboard.render.com> → **New** → **Web Service**.
 2. Connect your GitHub repo, select the `backend/` directory as the root
@@ -75,10 +135,20 @@ and needs no config file for a project this size.
    ```
    Check `catalogue_loaded: true` and `embeddings_ready: true` in the response.
 
-**Alternatives**, if you'd rather not use Render: **Railway** (similar flow,
-`railway up` from the `backend/` directory) or **Fly.io** (`fly launch` from
-`backend/`, needs a `Dockerfile` — ask if you want one written). Same RAM
-floor applies to both.
+**Other options:**
+
+### Fly.io
+
+`fly launch` from `backend/`, needs a `Dockerfile`. Same RAM floor applies.
+Note that Fly removed its permanent free tier in 2024 — new accounts get only
+a short trial, so this is a paid option in practice.
+
+### Oracle Cloud Free Tier
+
+The only genuinely always-free option with enough RAM (ARM instances go well
+past 1 GB). The tradeoff is that it is a raw VM, not a connect-your-repo
+platform: you provision the machine and install Python, `uv`, a reverse proxy
+and a service unit yourself, and wire up your own deploys.
 
 ## 3. Frontend — Vercel (recommended)
 
@@ -90,13 +160,19 @@ Next.js's own platform; zero-config for an App Router project.
 4. Environment variable:
    | Key | Value |
    |---|---|
-   | `NEXT_PUBLIC_API_BASE_URL` | the Render backend URL from step 2.9, e.g. `https://your-backend.onrender.com` |
+   | `NEXT_PUBLIC_API_BASE_URL` | the backend URL from step 1.6, e.g. `https://your-service.up.railway.app` |
 5. Deploy. Vercel gives you a URL like `https://your-project.vercel.app`.
+
+`NEXT_PUBLIC_*` values are baked in at **build** time, so changing this
+variable does nothing until you trigger a fresh deploy (Deployments → ⋯ →
+Redeploy). A stale value here is the usual cause of the UI reporting
+"Could not reach the assistant" or a bare 404.
 
 ## 4. Close the loop: CORS
 
 The backend only accepts browser requests from origins listed in
-`CORS_ORIGINS`. Go back to Render → your service → Environment, and set:
+`CORS_ORIGINS`. Go back to the backend service (Railway → Variables, or
+Render → Environment) and set:
 
 ```
 CORS_ORIGINS=https://your-project.vercel.app
@@ -123,18 +199,19 @@ CORS_ORIGINS=https://your-project.vercel.app,http://localhost:3000
 
 ## 6. Update the docs with the live URL
 
-Once confirmed working, add the URL to `README.md` (the assignment asks for
-it under Deliverables, "if deployed"). This repo's docs are otherwise
-final per your note — this is the one line that becomes true only after
-deployment, so it can't have been written earlier.
+Done for the current deployment — the URLs are in [README.md](README.md) and
+[demo.md](demo.md). If you redeploy elsewhere, update both, plus
+`NEXT_PUBLIC_API_BASE_URL` on Vercel and `CORS_ORIGINS` on the backend.
 
 ## Costs, roughly
 
-- Render Starter (backend, 1 GB): ~$7/month, no free tier viable at this
-  memory footprint.
-- Vercel (frontend): free tier is enough for this traffic level.
-- Anthropic API: pay-per-use, driven by search volume — see `ai-approach.md`
-  for the per-search cost.
+- **Backend**: Railway Hobby ~$5/month + usage, or Render Starter ~$7/month.
+  No free tier is viable long-term at this memory footprint.
+- **Frontend**: Vercel's free tier is enough for this traffic level.
+- **LLM API**: pay-per-use, one interpretation call per completed search (see
+  [ai-approach.md](ai-approach.md)). OpenRouter's free models cost nothing but
+  are slow and unreliable enough that they are better used as the *fallback*
+  than the primary — see [scope.md](scope.md#latency).
 
 ## If something fails
 
@@ -142,6 +219,10 @@ deployment, so it can't have been written earlier.
 |---|---|
 | Backend deploy OOMs / crashes on boot | Instance below 1 GB RAM |
 | Frontend loads, every search fails, CORS error in console | `CORS_ORIGINS` not set to the Vercel URL, or backend not redeployed after setting it |
-| Frontend loads, search fails with "Could not reach the assistant" | `NEXT_PUBLIC_API_BASE_URL` wrong, or backend still deploying/asleep |
+| Frontend loads, search fails with "Could not reach the assistant" or a 404 | `NEXT_PUBLIC_API_BASE_URL` wrong or stale (Vercel bakes it in at build time — redeploy after changing it), or backend still deploying |
 | `/api/v1/health` shows `catalogue_loaded: false` | `backend/data/products.json` wasn't committed — check `git ls-files backend/data/` |
-| Every response is `degraded_mode: true` | `ANTHROPIC_API_KEY` not set on the backend service, or account credit balance is low |
+| Every response is `degraded_mode: true` | No LLM key set for the selected `LLM_PROVIDER`, credit exhausted, or `INTERPRET_MODEL` is not a valid id for that provider |
+| `llm_configured: true` but searches still degrade | `INTERPRET_MODEL` names a model the provider rejects — e.g. an embedding model (`...-embedding-...`) where a chat model is required |
+| Health check itself is slow (10s+) or times out | Instance under-resourced for `torch` + `sentence-transformers`; move to ≥1 GB RAM |
+| Searches take a minute or more | A slow free-tier interpretation model. Put a fast model in `LLM_PROVIDER` and demote the free one to `LLM_FALLBACK_PROVIDER`; `FALLBACK_AFTER_S` bounds how long the primary may stall first |
+| Build fails: "could not determine how to build the app" | Root directory not set to `backend` on the platform |

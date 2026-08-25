@@ -189,4 +189,17 @@ quality.
 
 ## Status
 
-Local application only. No live deployment URL is included yet.
+Deployed and live:
+
+| Surface | URL |
+|---|---|
+| App (frontend) | <https://shopping-assist-iota.vercel.app> |
+| API (backend) | <https://shopping-assist-production.up.railway.app> |
+
+The frontend runs on Vercel, the backend on Railway (a persistent container --
+see [DEPLOYMENT.md](DEPLOYMENT.md) for why a serverless function does not fit
+this workload). Health check:
+
+```bash
+curl https://shopping-assist-production.up.railway.app/api/v1/health
+```

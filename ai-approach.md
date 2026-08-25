@@ -91,10 +91,27 @@ Evidence is prioritized by shopper usefulness:
 - rating and review count
 - price or discount
 
+## Provider Fallback
+
+An optional second provider can be configured (`LLM_FALLBACK_PROVIDER` +
+`FALLBACK_INTERPRET_MODEL`). `FallbackProvider` tries each in order and returns
+the first success, so a rate limit or outage on one provider does not drop the
+request straight to keyword matching. Each hop carries its own model id: a model
+valid on Anthropic is meaningless on OpenRouter, so sharing one `INTERPRET_MODEL`
+across providers would guarantee a mismatch on the fallback path.
+
+Every hop except the last is capped at `FALLBACK_AFTER_S` (default 8s). This
+exists because of a measured failure mode: a free-tier model took 37-67s per
+interpretation and failed roughly half the time, so the whole timeout was spent
+before the provider that would actually answer was even tried. Ordering matters
+-- put a fast, reliable model first and the free one behind it.
+
 ## Degraded Mode
 
-If the LLM is not configured or fails, the app uses keyword interpretation and
-sets `degraded_mode: true`. If the semantic embedding model is unavailable, it
-uses a hashing fallback and adds a note.
+If no provider is configured, or every provider in the chain fails, the app uses
+keyword interpretation and sets `degraded_mode: true`. If the semantic embedding
+model is unavailable, it uses a hashing fallback and adds a note.
 
-The goal is to keep the demo usable while making reduced quality explicit.
+The goal is to keep the demo usable while making reduced quality explicit -- a
+weaker answer should look weaker to the user and to the evaluator, never be
+passed off as a full-quality one.

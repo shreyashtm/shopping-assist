@@ -23,11 +23,25 @@ class FallbackProvider:
     name = "fallback"
     is_real = True
 
-    def __init__(self, chain: list[tuple[LLMProvider, str]]):
-        """`chain` is ordered (provider, model) pairs, first tried first."""
+    def __init__(
+        self,
+        chain: list[tuple[LLMProvider, str]],
+        earlier_hop_timeout_s: float | None = None,
+    ):
+        """`chain` is ordered (provider, model) pairs, first tried first.
+
+        `earlier_hop_timeout_s` caps how long every hop *except the last* may
+        take before being abandoned. Without it a slow primary burns the whole
+        request budget before the fallback gets a turn -- measured against a
+        free-tier model that took 37-67s per interpretation, so the caller
+        waited out the full timeout and only then started the call that would
+        actually succeed. The last hop keeps the full timeout: there is nothing
+        left to fall back to, so giving up early there only loses answers.
+        """
         if not chain:
             raise ValueError("FallbackProvider needs at least one (provider, model) pair")
         self._chain = chain
+        self._earlier_hop_timeout_s = earlier_hop_timeout_s
 
     def structured(
         self,
@@ -44,7 +58,17 @@ class FallbackProvider:
         # hop uses its own model from `self._chain`, never the caller's value.
         del model
         errors: list[str] = []
-        for provider, provider_model in self._chain:
+        last_index = len(self._chain) - 1
+        for index, (provider, provider_model) in enumerate(self._chain):
+            hop_timeout = timeout_s
+            if index < last_index and self._earlier_hop_timeout_s is not None:
+                # Never *raise* the caller's budget -- only shorten it, so a
+                # deliberately tight timeout_s is still respected.
+                hop_timeout = (
+                    self._earlier_hop_timeout_s
+                    if timeout_s is None
+                    else min(timeout_s, self._earlier_hop_timeout_s)
+                )
             try:
                 return provider.structured(
                     system=system,
@@ -52,7 +76,7 @@ class FallbackProvider:
                     schema=schema,
                     model=provider_model,
                     max_tokens=max_tokens,
-                    timeout_s=timeout_s,
+                    timeout_s=hop_timeout,
                     effort=effort,
                 )
             except LLMUnavailable as exc:

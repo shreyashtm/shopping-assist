@@ -68,14 +68,35 @@ count from 11 to 12 (see Catalogue Coverage above).
 
 ### Latency
 
-A completed full-quality search can take 20-25 seconds, mostly inside the one
-interpretation call. Server-sent events make the wait legible but do not reduce
-the underlying latency.
+Almost all of it is the single interpretation call, and the dominant factor is
+*which model serves it*, not the app's own work. Measured against the live
+deployment:
 
-### Deployment
+| Path | Time |
+|---|---|
+| Cache hit | ~0.4s |
+| Full search, fast hosted model (`claude-haiku-4-5`) | ~2-4s interpretation |
+| Full search, free-tier model (`nvidia/nemotron-3-super-120b-a12b:free`) | 37-67s interpretation, and it returned unparseable JSON on roughly half of attempts |
 
-The project is local only. There is no container, CI pipeline or live deployment
-URL yet.
+Retrieval, dedupe and explanation are deterministic local work and are not a
+meaningful share of the total.
+
+Two consequences the deployment has to live with:
+
+- **Free-tier models are a correctness problem, not just a speed one.** Their
+  structured-output failures fall through to `offline_interpret()` and the
+  response is honestly marked `degraded_mode: true` -- but the user waited a
+  long time for a weaker answer.
+- **A slow primary used to burn the whole budget before the fallback ran.**
+  `FallbackProvider` now caps every hop except the last at `fallback_after_s`
+  (default 8s), so a stalling primary is abandoned early and the working
+  provider is reached sooner. The last hop keeps the full `interpret_timeout_s`
+  -- there is nothing after it, so cutting it short would only lose answers.
+
+For a responsive deployment, put a fast reliable model first and keep the free
+model as the fallback, not the other way round.
+
+Server-sent events make the wait legible but do not reduce it.
 
 ## Future Scope
 
@@ -117,10 +138,15 @@ Introduce conversation IDs and server-held state if deeper multi-turn
 refinement becomes important. Today, the browser folds follow-ups into a
 self-contained query.
 
-### Deployment and CI
+### CI
 
-Containerise both services, run `pytest`, `npm run build` and `npm run lint` in
-CI, deploy the API behind a managed host, and serve the frontend through a CDN.
+Deployment itself is done -- frontend on Vercel, backend on Railway, both
+auto-deploying from `main` (see [DEPLOYMENT.md](DEPLOYMENT.md) and the URLs in
+[README.md](README.md)). What is still missing is a CI pipeline: `pytest`,
+`npm run build` and `npm run lint` should run on every push, so a broken
+commit is caught before it auto-deploys rather than after. Containerising both
+services would also make the deploy reproducible rather than
+platform-configured.
 
 ### Evaluation Harness
 

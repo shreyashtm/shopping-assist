@@ -1,13 +1,15 @@
-name: Keep Render backend warm
+name: Keep backend warm
 
-# Render's free tier spins the service down after ~15 minutes of no traffic;
-# the next request then pays a full cold boot (Python + torch +
-# sentence-transformers + catalogue load), which can take a minute or more.
-# Pinging /api/v1/health well inside that window keeps it always warm at $0
-# cost, at the price of ~144 tiny requests/day against GitHub's free Actions
-# minutes.
+# Paused. Kept because it is the fix if the backend is ever moved back to a
+# platform that spins containers down when idle (Render's free tier did, after
+# ~15 minutes: the next request then paid a full cold boot -- Python + torch +
+# sentence-transformers + catalogue load -- which measured as ~14s health
+# checks and 60s+ searches). Railway runs a persistent container, so this is
+# not currently needed.
+#
+# To re-enable: uncomment the schedule below and point the URL at the backend
+# that needs keeping warm.
 on:
-  # Paused during the Render -> Railway migration. Uncomment to re-enable.
   # schedule:
   #   - cron: "*/10 * * * *"
   workflow_dispatch: {}
@@ -17,4 +19,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping backend health endpoint
-        run: curl -f -s -m 30 https://shopping-assist-twlq.onrender.com/api/v1/health
+        run: curl -f -s -m 30 https://shopping-assist-production.up.railway.app/api/v1/health
