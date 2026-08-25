@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from normalize import (  # noqa: E402
+    assign_ids,
     clean_title,
     dedupe_key,
     guess_brand,
@@ -17,6 +18,68 @@ from normalize import (  # noqa: E402
     norm_amazon,
     sane_mrp,
 )
+
+
+def _record(title: str, url: str, prefix: str = "myn-x") -> dict:
+    return {"id": prefix, "title": title, "product_url": url}
+
+
+def test_ids_stay_unique_when_titles_share_a_long_prefix():
+    """Three real Roadster watches collided: their titles are identical for
+    far more than the 40 characters the id is built from, so all three were
+    assigned the same id. The catalogue then had duplicate ids, which made
+    `Catalogue.load()` score two of the watches with the third's embedding.
+    """
+    records = [
+        _record(
+            "The Roadster Lifestyle Co Men Analogue & Digital Watch RDSTR-8008 Gold",
+            "https://www.myntra.com/watches/roadster/a/1/buy",
+        ),
+        _record(
+            "The Roadster Lifestyle Co Men Analogue & Digital Watch RDSTR-8047 Black",
+            "https://www.myntra.com/watches/roadster/b/2/buy",
+        ),
+        _record(
+            "The Roadster Lifestyle Co Men Analogue & Digital Watch RDSTR-1545D White",
+            "https://www.myntra.com/watches/roadster/c/3/buy",
+        ),
+    ]
+
+    assign_ids(records)
+
+    ids = [r["id"] for r in records]
+    assert len(set(ids)) == 3, f"expected 3 distinct ids, got {ids}"
+
+
+def test_unique_titles_keep_a_clean_unsuffixed_id():
+    """The disambiguating suffix is only paid for by records that actually
+    collide -- everything else keeps the readable id."""
+    records = [
+        _record("Boldfit Yoga Mat", "https://example.com/a"),
+        _record("Lifelong Dumbbell Set", "https://example.com/b"),
+    ]
+
+    assign_ids(records)
+
+    assert records[0]["id"] == "myn-boldfit-yoga-mat"
+    assert records[1]["id"] == "myn-lifelong-dumbbell-set"
+
+
+def test_ids_do_not_depend_on_record_order():
+    """A rebuild must reproduce the same ids. If only the *second* colliding
+    record were suffixed, a reordered scrape would silently reassign ids and
+    every committed id would churn."""
+    a = _record("Same Long Product Title That Collides Beyond Forty Chars A", "https://x/1")
+    b = _record("Same Long Product Title That Collides Beyond Forty Chars B", "https://x/2")
+
+    forward = [dict(a), dict(b)]
+    backward = [dict(b), dict(a)]
+    assign_ids(forward)
+    assign_ids(backward)
+
+    by_url = {r["product_url"]: r["id"] for r in forward}
+    for record in backward:
+        assert record["id"] == by_url[record["product_url"]]
 
 
 def test_clean_title_trims_seo_keyword_stuffing():

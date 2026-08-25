@@ -13,6 +13,7 @@ against the wrong vectors.
 
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -35,6 +36,22 @@ def main() -> int:
         return 1
 
     products = [Product.model_validate(item) for item in json.loads(PRODUCTS_FILE.read_text())]
+
+    # Unique ids are a correctness requirement, not a nicety: Catalogue.load()
+    # maps id -> embedding row, so a repeated id silently collapses to one row
+    # and the other products carrying that id get scored against a different
+    # product's vector. Caught here rather than shipped, because the symptom
+    # downstream is invisible -- slightly wrong ranking, plus a duplicate-key
+    # warning in the UI if two of them land in the same group.
+    counts = Counter(p.id for p in products)
+    duplicates = {pid: n for pid, n in counts.items() if n > 1}
+    if duplicates:
+        print(f"ERROR: {len(duplicates)} duplicate product ids in {PRODUCTS_FILE.name}:")
+        for pid, n in sorted(duplicates.items()):
+            print(f"  {pid} x{n}")
+        print("\nRe-run scripts/normalize.py -- assign_ids() disambiguates collisions.")
+        return 1
+
     embedder = get_embedder()
     if not embedder.is_semantic:
         print(

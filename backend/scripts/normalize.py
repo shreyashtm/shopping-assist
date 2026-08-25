@@ -18,9 +18,11 @@ below exists because the scraped data actually exhibited the problem:
   a genuine zero-star score.
 """
 
+import hashlib
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -169,6 +171,39 @@ def norm_myntra(item: dict) -> dict | None:
 NORMALIZERS = {"Amazon.in": norm_amazon, "Myntra": norm_myntra}
 
 
+def assign_ids(records: list[dict]) -> None:
+    """Give every record a stable, readable, **unique** id, in place.
+
+    The readable form is a retailer prefix plus the slugified title, truncated
+    to 40 characters. That truncation is what made ids collide: three distinct
+    Roadster watches ("...RDSTR-8008 Gold", "...RDSTR-8047 Black",
+    "...RDSTR-1545D White Black") are identical well past 40 characters, so all
+    three were assigned the same id. Dedupe did not catch them because it keys
+    on (title, image) and these genuinely differ -- they are separate products
+    that should both exist.
+
+    Duplicate ids were not cosmetic. `Catalogue.load()` builds
+    `{id: row}` from `embedding_ids.json`, so a repeated id collapses to the
+    last row and the earlier products get scored against *another product's*
+    embedding.
+
+    On collision every colliding record is suffixed with a short hash of its
+    product URL (which carries the retailer's own unique id). Suffixing all of
+    them rather than "all but the first" keeps ids independent of iteration
+    order, so a rebuild reproduces the committed catalogue instead of churning
+    ids whenever the scrape order shifts.
+    """
+    bases = [f"{r['id'][:4]}{slugify(r['title'])[:40]}".strip("-") for r in records]
+    collisions = {base for base, count in Counter(bases).items() if count > 1}
+
+    for record, base in zip(records, bases, strict=True):
+        if base in collisions:
+            digest = hashlib.sha1(record["product_url"].encode()).hexdigest()[:6]
+            record["id"] = f"{base}-{digest}"
+        else:
+            record["id"] = base
+
+
 def dedupe_key(record: dict) -> tuple[str, str]:
     """Same visible name + same image = the same product relisted."""
     title = re.sub(r"[^a-z0-9]", "", record["title"].lower())
@@ -211,9 +246,8 @@ def main() -> int:
         cap = KEEP_PER_QUERY.get(retailer, DEFAULT_KEEP)
         products.extend(records[: min(cap, len(records))])
 
-    # Stable, readable ids.
-    for record in products:
-        record["id"] = f"{record['id'][:4]}{slugify(record['title'])[:40]}".strip("-")
+    # Stable, readable, unique ids.
+    assign_ids(products)
 
     OUT_FILE.write_text(json.dumps(products, indent=2, ensure_ascii=False))
     print(
