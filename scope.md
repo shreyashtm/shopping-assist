@@ -69,8 +69,8 @@ count from 11 to 12 (see Catalogue Coverage above).
 ### Latency
 
 Almost all of it is the single interpretation call, and the dominant factor is
-*which model serves it*, not the app's own work. Measured against the live
-deployment:
+*which model serves it*, not the app's own work. Full measurements — startup,
+per-stage and per-model — are in [performance.md](performance.md); the summary:
 
 | Path | Time |
 |---|---|

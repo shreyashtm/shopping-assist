@@ -184,7 +184,9 @@ quality.
 | [ai-approach.md](ai-approach.md) | LLM, retrieval, context and fallback strategy |
 | [catalogue.md](catalogue.md) | Product data, enrichment and indexing |
 | [testing.md](testing.md) | Test strategy and regression cases |
+| [performance.md](performance.md) | Measured startup, per-request and per-model timings |
 | [scope.md](scope.md) | Known limitations and future scope |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Live URLs, platform setup and deployment troubleshooting |
 | [demo.md](demo.md) | Suggested demo video flow and deployment status |
 
 ## Status

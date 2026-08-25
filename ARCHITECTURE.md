@@ -17,6 +17,7 @@ The system has two pipelines that meet at `backend/data/`:
 | [api.md](api.md) | Request/response contract and examples |
 | [ai-approach.md](ai-approach.md) | AI, retrieval and degraded-mode strategy |
 | [catalogue.md](catalogue.md) | Catalogue source, schema, enrichment and indexing |
+| [performance.md](performance.md) | Measured startup, per-request and per-model timings |
 | [scope.md](scope.md) | Known limitations and future scope |
 
 ## A Request, End to End
