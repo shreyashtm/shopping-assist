@@ -75,7 +75,7 @@ per-stage and per-model — are in [performance.md](performance.md); the summary
 | Path | Time |
 |---|---|
 | Cache hit | ~0.4s |
-| Full search, fast hosted model (`claude-haiku-4-5`) | ~2-4s interpretation |
+| Full search, warm, fast hosted model (`claude-haiku-4-5`) | ~7.5s end-to-end |
 | Full search, free-tier model (`nvidia/nemotron-3-super-120b-a12b:free`) | 37-67s interpretation, and it returned unparseable JSON on roughly half of attempts |
 
 Retrieval, dedupe and explanation are deterministic local work and are not a

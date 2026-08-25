@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
-from app.core.deps import load_catalogue, load_provider, load_taxonomy
+from app.core.deps import load_catalogue, load_embedder, load_provider, load_taxonomy
 from app.core.errors import register_error_handlers
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -22,10 +22,15 @@ async def lifespan(_: FastAPI):
     Doing this lazily on first request would put a multi-second model load in
     front of a real user; doing it here surfaces a missing catalogue in the logs
     at boot instead of as a failed search.
+
+    The embedder is warmed last, and on purpose: it is the slowest of the four
+    (~7s) and the only one a request can survive without, so the cheap checks
+    log their state before the expensive one starts.
     """
     load_catalogue()
     load_taxonomy()
     load_provider()
+    load_embedder()
     yield
 
 

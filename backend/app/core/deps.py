@@ -61,6 +61,33 @@ def load_catalogue() -> Catalogue | None:
     return _catalogue
 
 
+def load_embedder() -> None:
+    """Warm the query embedder so the first real search does not pay for it.
+
+    `get_embedder()` is `lru_cache`d, so calling it here populates the cache
+    that `recommend.py` reads later. Without this the ~7s sentence-transformers
+    load happened lazily inside the first search -- measured as a 22.6s first
+    request against a 7.5s warm one -- and on a fresh deploy it is worse still,
+    because the ~90MB model downloads from Hugging Face on first use.
+
+    Deliberately never raises: `get_embedder()` already degrades to the hashing
+    embedder rather than failing, and a container that refuses to boot is worse
+    than one serving weaker matches with `degraded_mode` set.
+    """
+    try:
+        from app.adapters.embeddings.local import get_embedder
+
+        embedder = get_embedder()
+        logger.info(
+            "Embedder ready: %s (%dd, semantic=%s)",
+            embedder.name,
+            embedder.dimension,
+            embedder.is_semantic,
+        )
+    except Exception as exc:  # noqa: BLE001 - startup must survive any failure
+        logger.warning("Embedder warm-up failed (%s); it will load on first search.", exc)
+
+
 def _build_named_provider(name: str, settings) -> LLMProvider | None:
     """Construct one provider by name, or None if its key is missing.
 

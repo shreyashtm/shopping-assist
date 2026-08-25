@@ -46,10 +46,11 @@ persistent container (Render, Railway, Fly.io, a VPS). Budget **at least 1 GB
 RAM**; a 512 MB free tier will likely OOM on startup.
 
 **Latency is dominated by which interpretation model you configure**, not by
-the app's own work. A fast hosted model interprets in ~2-4s; a free-tier model
-measured 37-67s and failed roughly half the time. Set `LLM_PROVIDER` to a fast
-model and keep the free one as `LLM_FALLBACK_PROVIDER`, not the reverse. See
-[scope.md](scope.md#latency) for the measurements.
+the app's own work. A full warm search on `claude-haiku-4-5` measures ~7.5s
+end-to-end; the free-tier model took 37-67s for the interpretation call alone
+and failed roughly half the time. Set `LLM_PROVIDER` to a fast model and keep
+the free one as `LLM_FALLBACK_PROVIDER`, not the reverse. See
+[performance.md](performance.md) for the full measurements.
 
 ---
 

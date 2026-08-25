@@ -18,14 +18,22 @@ takes a minute.
 | `Catalogue.load()` — 1,738 products + `embeddings.npy` | 0.02s |
 | Embedding model load (`all-MiniLM-L6-v2`, already cached on disk) | 6.83s |
 
-The embedding model is the whole startup cost. On a **fresh deploy** it is
-slower still, because the ~90 MB model is downloaded from Hugging Face on
-first use rather than read from disk — budget roughly a minute for the first
-request after a new deploy, then it is cached for the life of that container.
+The embedding model is the whole startup cost. All four loaders run in
+`main.py`'s lifespan, so the container finishes booting *ready* — the embedder
+is warmed there rather than lazily inside the first search. That single change
+took the first real search from **22.6s to 10.4s**; without it, the first user
+after every deploy paid the model load personally.
 
-A platform that spins containers down when idle pays this cost again on every
-wake. Render's free tier does this after ~15 minutes; Railway runs a
-persistent container and does not.
+On a **fresh deploy** startup is slower still, because the ~90 MB model is
+downloaded from Hugging Face rather than read from disk — then cached for the
+life of that container.
+
+A platform that spins containers down when idle pays all of this again on every
+wake. Render's free tier does this after ~15 minutes; Railway runs a persistent
+container and does not. Note that a `/health` ping does **not** prevent it:
+health only reads already-loaded state and never touches the embedder, so
+keep-warm cron jobs keep a container alive without keeping it *warm* in the
+sense that matters.
 
 ## Per request
 
@@ -45,21 +53,24 @@ than a network round trip to one would be. See
 
 ## The interpretation call is the whole story
 
-| Model | Interpretation time | Reliability |
-|---|---|---|
-| `claude-haiku-4-5` (Anthropic, paid) | ~2–4s | Reliable |
-| `nvidia/nemotron-3-super-120b-a12b:free` (OpenRouter, free) | **37–67s** | **Returned unparseable JSON on roughly half of attempts** |
+Measured end-to-end (`meta.latency_ms`, the whole request), not the model call
+in isolation:
 
-Measured with the real interpretation prompt — a 5,607-character system prompt
-plus the live catalogue taxonomy — not a toy request. The free model's failure
-mode matters as much as its latency: a structured-output failure falls through
-to `offline_interpret()`, so the user waits a long time and *then* gets a
-keyword-quality answer, honestly marked `degraded_mode: true`.
+| Model | Full search, warm | First search after boot | Reliability |
+|---|---|---|---|
+| `claude-haiku-4-5` (Anthropic, paid) | **7.5s** | 10.4s | Reliable |
+| `nvidia/nemotron-3-super-120b-a12b:free` (OpenRouter, free) | 12–14.5s *when it answered first try* | — | **Returned unparseable JSON on roughly half of attempts**; 37–67s for the interpretation call alone |
 
-End-to-end, a full uncached search against the live backend measured
-**12–14.5s** when the free model happened to answer on the first try. Two
-turns of a clarification round-trip, with a stalled first attempt in each,
-is how a search reaches a minute or more.
+All measured with the real interpretation prompt — a 5,607-character system
+prompt plus the live catalogue taxonomy — not a toy request. An isolated
+model call is much faster than these numbers suggest; the prompt is the
+difference, which is why only end-to-end figures are quoted here.
+
+The free model's failure mode matters as much as its latency: a
+structured-output failure falls through to `offline_interpret()`, so the user
+waits a long time and *then* gets a keyword-quality answer, honestly marked
+`degraded_mode: true`. Two turns of a clarification round-trip, each with a
+stalled first attempt, is how a search reaches a minute or more.
 
 ### Practical configuration
 
