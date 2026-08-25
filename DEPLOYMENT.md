@@ -75,10 +75,44 @@ and needs no config file for a project this size.
    ```
    Check `catalogue_loaded: true` and `embeddings_ready: true` in the response.
 
-**Alternatives**, if you'd rather not use Render: **Railway** (similar flow,
-`railway up` from the `backend/` directory) or **Fly.io** (`fly launch` from
-`backend/`, needs a `Dockerfile` — ask if you want one written). Same RAM
-floor applies to both.
+**Alternatives**, if you'd rather not use Render:
+
+### Railway
+
+Web-dashboard flow, no CLI/login needed (same shape as Render/Vercel below).
+
+1. Go to <https://railway.app> → **New Project** → **Deploy from GitHub repo**
+   → select this repo.
+2. Service Settings → **Root Directory**: `backend`.
+3. Service Settings → **Build**:
+   - Build command: `pip install uv && uv sync --extra dev --no-dev`
+   - Start command: `uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+   (Railway injects `$PORT` the same way Render does. Nixpacks' Python
+   auto-detection doesn't know about `uv`-managed projects, so both commands
+   need to be set explicitly rather than left on auto-detect.)
+4. Variables tab — same set as Render's table below (`ANTHROPIC_API_KEY` /
+   `OPENROUTER_API_KEY` + `LLM_PROVIDER`, `CORS_ORIGINS`, optionally
+   `LLM_FALLBACK_PROVIDER` + `FALLBACK_INTERPRET_MODEL`).
+5. Deploy. Settings → **Networking** → **Generate Domain** to get a public
+   `https://your-service.up.railway.app` URL (not automatic like Render/Vercel
+   — Railway defaults to no public domain until you ask for one).
+6. Confirm with `curl https://your-service.up.railway.app/api/v1/health`,
+   same checks as Render's step 9.
+
+**RAM, specifically because this is why Render's free tier struggled**:
+Railway's 30-day trial gives 1 GB RAM (the floor this app needs) and shared
+vCPU, funded by a one-time $5 credit — a 24/7 backend will likely burn that
+credit well before 30 days, not run the full trial. After the trial or once
+the credit is gone, the ongoing Free plan drops to 0.5 GB RAM, the same
+ceiling that caused the Render problem. Treat this as a way to get a working
+demo on a real RAM budget *now*, not a permanent zero-cost fix — the Hobby
+plan (~$5/month base + usage) is the actual long-term answer if this needs
+to stay up.
+
+### Fly.io
+
+`fly launch` from `backend/`, needs a `Dockerfile` — ask if you want one
+written. Same RAM floor applies.
 
 ## 3. Frontend — Vercel (recommended)
 
