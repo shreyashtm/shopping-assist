@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     # Ollama's OpenAI-compatible endpoint. No key needed -- it's local.
     local_llm_base_url: str = "http://localhost:11434/v1/chat/completions"
 
+    # Optional second provider, tried when `llm_provider` is unconfigured or a
+    # live call fails (rate limit, transport error, etc.) -- see
+    # adapters/llm/fallback_provider.py. Needs its own model id: a model valid
+    # on one provider is meaningless on another, so `fallback_interpret_model`
+    # is required alongside it rather than reusing `interpret_model`.
+    llm_fallback_provider: Literal["anthropic", "openrouter", "local"] | None = None
+    fallback_interpret_model: str | None = None
+
     # One model call per completed search, and this is it. The user-visible
     # explanations are composed from retrieval evidence (services/explain.py)
     # rather than by a second call, which is why no ranking model appears here.
@@ -71,7 +79,11 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        # Browser Origin headers never carry a trailing slash (Origin is
+        # scheme+host+port only, never a path) -- CORSMiddleware does exact
+        # string matching, so a trailing slash pasted into the env var would
+        # silently reject every real browser request.
+        return [o.strip().rstrip("/") for o in self.cors_origins.split(",") if o.strip()]
 
 
 @lru_cache

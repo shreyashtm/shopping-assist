@@ -61,50 +61,93 @@ def load_catalogue() -> Catalogue | None:
     return _catalogue
 
 
-def load_provider() -> LLMProvider | None:
-    """Build the configured LLM provider, if its key is set.
+def _build_named_provider(name: str, settings) -> LLMProvider | None:
+    """Construct one provider by name, or None if its key is missing.
 
-    `settings.llm_provider` picks the adapter; both implement the same
-    `LLMProvider` protocol, so nothing downstream of this function needs to
-    know which one is live. Returns None rather than raising when the
-    selected provider's key is missing: the app is designed to run without
-    one, in a clearly-labelled degraded mode.
+    Shared by the primary and fallback slots so the anthropic/openrouter/local
+    branching lives in exactly one place.
     """
-    global _provider
-    settings = get_settings()
-
-    if settings.llm_provider == "local":
+    if name == "local":
         # No key check: Ollama's local server doesn't need one. A missing or
         # unreachable server surfaces as LLMUnavailable on the first call and
         # degrades normally, same as any other transport failure.
         from app.adapters.llm.local_provider import LocalProvider
 
-        _provider = LocalProvider(base_url=settings.local_llm_base_url, timeout_s=settings.llm_timeout_s)
-        logger.info("LLM provider ready (local, interpret=%s)", settings.interpret_model)
-        return _provider
+        return LocalProvider(base_url=settings.local_llm_base_url, timeout_s=settings.llm_timeout_s)
 
-    if settings.llm_provider == "openrouter":
+    if name == "openrouter":
         if not settings.openrouter_api_key:
-            logger.warning(
-                "llm_provider=openrouter but no OPENROUTER_API_KEY set; "
-                "running with keyword interpretation."
-            )
-            _provider = None
             return None
         from app.adapters.llm.openrouter_provider import OpenRouterProvider
 
-        _provider = OpenRouterProvider(settings.openrouter_api_key, settings.llm_timeout_s)
-        logger.info("LLM provider ready (openrouter, interpret=%s)", settings.interpret_model)
-        return _provider
+        return OpenRouterProvider(settings.openrouter_api_key, settings.llm_timeout_s)
 
     if not settings.anthropic_api_key:
-        logger.warning("No ANTHROPIC_API_KEY set; running with keyword interpretation.")
-        _provider = None
         return None
     from app.adapters.llm.anthropic_provider import AnthropicProvider
 
-    _provider = AnthropicProvider(settings.anthropic_api_key, settings.llm_timeout_s)
-    logger.info("LLM provider ready (anthropic, interpret=%s)", settings.interpret_model)
+    return AnthropicProvider(settings.anthropic_api_key, settings.llm_timeout_s)
+
+
+def load_provider() -> LLMProvider | None:
+    """Build the configured LLM provider (plus an optional fallback), if
+    either has its key set.
+
+    `settings.llm_provider` picks the primary adapter; every adapter (and the
+    two-provider `FallbackProvider` wrapper) implements the same `LLMProvider`
+    protocol, so nothing downstream of this function needs to know which one
+    is actually live. Returns None only when neither primary nor fallback has
+    a usable key: the app is designed to run without one, in a
+    clearly-labelled degraded mode.
+    """
+    global _provider
+    settings = get_settings()
+
+    primary = _build_named_provider(settings.llm_provider, settings)
+    if primary is not None:
+        logger.info(
+            "LLM provider ready (%s, interpret=%s)", settings.llm_provider, settings.interpret_model
+        )
+
+    fallback = None
+    if settings.llm_fallback_provider and settings.llm_fallback_provider != settings.llm_provider:
+        if not settings.fallback_interpret_model:
+            logger.warning(
+                "llm_fallback_provider=%s set but fallback_interpret_model is missing; "
+                "fallback disabled.",
+                settings.llm_fallback_provider,
+            )
+        else:
+            fallback = _build_named_provider(settings.llm_fallback_provider, settings)
+            if fallback is not None:
+                logger.info(
+                    "Fallback LLM provider ready (%s, interpret=%s)",
+                    settings.llm_fallback_provider,
+                    settings.fallback_interpret_model,
+                )
+            else:
+                logger.warning(
+                    "llm_fallback_provider=%s set but its key is missing; fallback disabled.",
+                    settings.llm_fallback_provider,
+                )
+
+    if fallback is not None:
+        # Wrapped even when primary is None: recommend.py always calls
+        # provider.structured(model=settings.interpret_model, ...), so a bare
+        # fallback provider would be called with the *primary's* model id --
+        # the same provider/model mismatch fixed elsewhere this session.
+        # FallbackProvider ignores that argument and uses each hop's own model.
+        from app.adapters.llm.fallback_provider import FallbackProvider
+
+        chain = [(fallback, settings.fallback_interpret_model)]
+        if primary is not None:
+            chain.insert(0, (primary, settings.interpret_model))
+        _provider = FallbackProvider(chain)
+        return _provider
+
+    _provider = primary
+    if _provider is None:
+        logger.warning("No LLM provider configured; running with keyword interpretation.")
     return _provider
 
 

@@ -245,6 +245,13 @@ must be a model id valid for whichever provider is selected -- it does not
 default sensibly across providers (the class default,
 `claude-haiku-4-5`, is Anthropic-only).
 
+An optional second provider (`LLM_FALLBACK_PROVIDER` +
+`FALLBACK_INTERPRET_MODEL`) can be configured alongside the primary.
+`app/adapters/llm/fallback_provider.py::FallbackProvider` wraps both behind
+the same protocol -- the primary is tried first, and only on `LLMUnavailable`
+(missing key, rate limit, transport error) does it try the fallback, so
+recommend.py's interpret step needs no changes to benefit from it.
+
 The provider is optional either way. If its key is absent or it fails, the
 system uses `offline_interpret()` and marks the response as
 `degraded_mode: true`.
