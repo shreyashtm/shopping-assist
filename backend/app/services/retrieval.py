@@ -105,6 +105,28 @@ PENALTY_THERMAL_MISMATCH = 0.5
 # in the same 0..1 sense as temperature_fit's returned score.
 PENALTY_SUITABILITY_STRONG = 0.5
 
+# Same shape again, for axis 2 of the taxonomy: what a product is *for*.
+#
+# services/taxonomy.py separates product type from use case precisely so one
+# product can answer many intents -- but only axis 1 (catalogue_paths) was ever
+# enforced. use_case was additive-only, so a product carrying an *opposing*
+# use case lost a boost it never earned and was otherwise untouched. The
+# flagship trek query surfaced "Women's Shiny Pleated Wide Leg Pants Party
+# Night" -- literally use_case=['party'] -- under "Trekking Trousers", because
+# it was type-correct and no trekking trousers existed for that gender and
+# budget. The honest outcome there is an unfilled slot, which this system
+# already produces for other unfillable needs in the same response.
+PENALTY_USE_CASE_CONFLICT = 0.5
+
+# Use cases that genuinely exclude one another. Kept deliberately narrow:
+# only a product whose use cases are *entirely* within the opposing set is
+# penalised, so a versatile item tagged both "party" and "daily-wear" is never
+# treated as a conflict. Everything outside these two sets -- daily-wear,
+# travel, layering, office, home, gifting -- is neutral by design and can
+# legitimately appear in either context.
+_ACTIVE_USE_CASES = frozenset({"trekking", "camping", "running", "gym", "yoga", "cycling"})
+_DRESSY_USE_CASES = frozenset({"party", "festive", "wedding", "formal"})
+
 # How informative each kind of evidence is, lowest first. This is a separate
 # axis from the boost weights above: a temperature margin that only earns a
 # small boost is still the most useful sentence we can offer, because it is
@@ -481,6 +503,8 @@ def score_product(
         boost += BOOST_USE_CASE
         evidence.append((EVIDENCE_USE_CASE, f"made for {', '.join(matched_use)}"))
 
+    conflicting_use = use_case_conflict(product, phrase_tokens)
+
     matched_occasion = _overlap(product.attributes.occasion, phrase_tokens)
     if matched_occasion:
         boost += BOOST_OCCASION
@@ -511,6 +535,16 @@ def score_product(
         # Recorded either way: an objection is at least as worth showing the
         # shopper as an endorsement.
         evidence.append((EVIDENCE_TEMPERATURE, temp_reason))
+
+    use_case_penalty = 0.0
+    if conflicting_use:
+        # Same shape as the thermal and suitability penalties: subtracted after
+        # scaling, so being built for the opposite intent sinks a candidate
+        # however well its text reads. This is what turns "the only trousers in
+        # range are party pants" from a first-place result into an honest
+        # unfilled slot.
+        use_case_penalty = PENALTY_USE_CASE_CONFLICT
+        evidence.append((EVIDENCE_USE_CASE, f"made for {conflicting_use}, not this"))
 
     suitability_penalty = 0.0
     verdict = suitability.evaluate(product, constraints)
@@ -556,6 +590,8 @@ def score_product(
         score -= thermal_penalty
     if suitability_penalty:
         score -= suitability_penalty
+    if use_case_penalty:
+        score -= use_case_penalty
     if not product.in_stock:
         score -= PENALTY_OUT_OF_STOCK
     if product.link_status != "verified":
@@ -620,6 +656,35 @@ def search_bucket(
     scored = [s for s in scored if s.semantic >= MIN_SEMANTIC]
     scored.sort(key=lambda s: s.score, reverse=True)
     return scored[:limit]
+
+
+def use_case_conflict(product: Product, phrase_tokens: set[str]) -> str | None:
+    """Name the opposing intent when a product is built for the wrong one.
+
+    Conservative by construction, matching `temperature_fit()` and
+    `suitability.evaluate()`:
+
+    * a product with no `use_case` is never a conflict -- absent evidence is
+      not opposing evidence;
+    * a bucket that expresses no active/dressy intent never penalises anything;
+    * a product is only in conflict when *every* use case it declares sits in
+      the opposing set, so a versatile item tagged both "party" and
+      "daily-wear" survives.
+    """
+    declared = {u.lower() for u in product.attributes.use_case if u}
+    if not declared:
+        return None
+
+    bucket_active = bool(phrase_tokens & _ACTIVE_USE_CASES)
+    bucket_dressy = bool(phrase_tokens & _DRESSY_USE_CASES)
+    # A bucket asking for both, or for neither, has no clear intent to violate.
+    if bucket_active == bucket_dressy:
+        return None
+
+    opposing = _DRESSY_USE_CASES if bucket_active else _ACTIVE_USE_CASES
+    if declared <= opposing:
+        return ", ".join(sorted(declared))
+    return None
 
 
 def is_group_worth_showing(items: list[ScoredProduct]) -> bool:

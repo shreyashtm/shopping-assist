@@ -721,3 +721,91 @@ def test_strong_suitability_penalty_sinks_a_better_text_match():
     assert weak_text_match.score > strong_text_match.score, (
         "the right formality must be able to outrank higher raw similarity"
     )
+
+
+# --- Use-case conflict: axis 2 must gate, not merely boost ------------------
+#
+# Real defect, seen on the flagship trek query. "Trekking Trousers" returned
+# "Women's Shiny Pleated Wide Leg Pants Party Night" -- a product literally
+# carrying use_case=['party']. The two-axis taxonomy (see services/taxonomy.py)
+# separates *what a thing is* from *what it is for*, but only axis 1 was
+# enforced: catalogue_paths is a hard gate, while use_case was additive-only
+# (BOOST_USE_CASE) with no penalty for an opposing value. A party pant
+# therefore lost only a boost it never earned, and with no trekking trousers
+# in stock for that gender and budget it ranked first.
+#
+# The honest outcome is an unfilled slot -- which this system already produces
+# for Trekking Footwear in the very same response.
+
+PARTY_BUCKET = Bucket(
+    name="Party Outfit",
+    search_phrases=["party wear trousers"],
+    why_needed="A night out.",
+    role="required",
+    catalogue_paths=["Women's Apparel/Trousers"],
+)
+TREK_TROUSERS_BUCKET = Bucket(
+    name="Trekking Trousers",
+    search_phrases=["trekking trousers for hiking"],
+    why_needed="Durable trousers for a multi-day trek at altitude.",
+    role="required",
+    catalogue_paths=["Women's Apparel/Trousers"],
+)
+
+
+def _trouser(pid: str, use_case: list[str]) -> Product:
+    return make_product(
+        pid,
+        category="Women's Apparel",
+        subcategory="Trousers",
+        attributes={"gender": "women", "use_case": use_case},
+    )
+
+
+def test_conflicting_use_case_sinks_below_a_neutral_product():
+    """A party pant must not outrank an unlabelled trouser for a trek, even
+    when it is the better semantic match."""
+    party = _trouser("party", ["party"])
+    neutral = _trouser("neutral", [])
+
+    party_scored = score_product(
+        party, semantic=0.72, bucket=TREK_TROUSERS_BUCKET, context=MILD
+    )
+    neutral_scored = score_product(
+        neutral, semantic=0.60, bucket=TREK_TROUSERS_BUCKET, context=MILD
+    )
+
+    assert neutral_scored.score > party_scored.score
+
+
+def test_missing_use_case_is_never_treated_as_a_conflict():
+    """Same rule temperature_fit() and suitability.evaluate() already follow:
+    absent evidence is not opposing evidence."""
+    neutral = _trouser("neutral", [])
+    baseline = score_product(neutral, semantic=0.60, bucket=TREK_TROUSERS_BUCKET, context=MILD)
+
+    assert baseline.score >= 0.60 * 0.99
+
+
+def test_matching_use_case_is_still_rewarded():
+    trekking = _trouser("trek", ["trekking"])
+    neutral = _trouser("neutral", [])
+
+    trek_scored = score_product(
+        trekking, semantic=0.60, bucket=TREK_TROUSERS_BUCKET, context=MILD
+    )
+    neutral_scored = score_product(
+        neutral, semantic=0.60, bucket=TREK_TROUSERS_BUCKET, context=MILD
+    )
+
+    assert trek_scored.score > neutral_scored.score
+
+
+def test_no_penalty_when_the_bucket_expresses_no_use_case():
+    """Only an explicit conflict counts. A bucket with no strong use-case
+    signal must not penalise anything."""
+    party = _trouser("party", ["party"])
+
+    in_party_bucket = score_product(party, semantic=0.60, bucket=PARTY_BUCKET, context=MILD)
+
+    assert in_party_bucket.score >= 0.60 * 0.99
