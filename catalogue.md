@@ -49,7 +49,7 @@ Important structured attributes include:
 - `is_giftable`
 - `water_resistance`, `layer`, `formality`, `breathability` -- targets the
   1,201 apparel/footwear/outdoor-gear products where they are meaningful, via
-  `scripts/enrich_suitability.py`; 107 enriched so far (partial run, see
+  `scripts/enrich_suitability.py`; 116 enriched so far (partial run, see
   [scope.md](scope.md)). Feed the suitability layer
   (`services/constraints.py`, `services/suitability.py`); see
   [design-decisions.md](design-decisions.md). Unenriched products are safe --

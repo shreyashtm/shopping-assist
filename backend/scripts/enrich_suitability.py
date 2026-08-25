@@ -9,21 +9,34 @@ temp_rating_c) is left untouched and is itself useful grounding: a product
 already tagged use_case=trekking and material=down is strong evidence for
 layer=outer, without the model re-deriving it from the title alone.
 
-Runs synchronously (not through the Batch API) so it finishes within one
-session instead of queueing for up to 24h -- worth the 2x token cost here
-because the result needs to be checked and wired up in the same sitting.
+Provider-agnostic through the same `LLMProvider` protocol the runtime uses
+(app/adapters/llm/) -- Anthropic, OpenRouter, or a local model server, picked
+with `--provider`. This exists specifically so enrichment does not have to
+mean spending API credits: OpenRouter's free-tier models (any `:free`-suffixed
+id that supports `structured_outputs` -- check `--list-free-models`) run this
+at $0, and a local Ollama model runs it at $0 with no external account at
+all. Judgement quality varies with model size either way; spot-check the
+result against `--limit` before committing to a full run.
 
-    uv run python scripts/enrich_suitability.py           # all target products
-    uv run python scripts/enrich_suitability.py --limit 24  # smoke test
+Runs synchronously (not through a batch queue) so it finishes within one
+session instead of queueing for up to 24h.
+
+    uv run python scripts/enrich_suitability.py --provider local --model llama3.2:3b --limit 24
+    uv run python scripts/enrich_suitability.py --provider openrouter --model z-ai/glm-5.2:free
+    uv run python scripts/enrich_suitability.py                                    # Anthropic, ENRICH_MODEL
+    uv run python scripts/enrich_suitability.py --list-free-models                 # what's free right now
 """
 
+import argparse
 import json
-import os
 import sys
 import time
 from pathlib import Path
 
-import anthropic
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app.adapters.llm.base import LLMProvider, LLMUnavailable  # noqa: E402
+from app.core.config import get_settings  # noqa: E402
 
 BASE = Path(__file__).resolve().parent.parent
 PRODUCTS_FILE = BASE / "data" / "products.json"
@@ -38,7 +51,6 @@ TARGET_CATEGORIES = {
 }
 
 BATCH_SIZE = 12
-MODEL = os.environ.get("ENRICH_MODEL", "claude-sonnet-5")
 
 WATER_RESISTANCE_VALUES = ["none", "repellent", "waterproof"]
 LAYER_VALUES = ["base", "mid", "outer", "standalone"]
@@ -60,6 +72,8 @@ SUITABILITY_SCHEMA = {
                     # of what the enum values are -- confirmed by isolating it
                     # against a trivial schema. The supported nullable-enum
                     # shape is `enum` alone with `null` as one of its members.
+                    # Kept this way for every provider rather than branching,
+                    # since it validates fine everywhere it's been tried.
                     "water_resistance": {
                         "enum": [*WATER_RESISTANCE_VALUES, None],
                         "description": "'none' is a real judgement (this garment "
@@ -121,7 +135,8 @@ there is no real basis to judge it.
 Ground every field in the title, category and existing attributes. Never
 invent a specification the data does not support -- null is the honest answer
 when genuinely unsure, and 'none' is the honest answer when a garment plainly
-lacks the property rather than merely being unevaluated for it."""
+lacks the property rather than merely being unevaluated for it. Every product
+listed must appear exactly once in your response, id copied verbatim."""
 
 
 def build_prompt(batch: list[dict]) -> str:
@@ -139,18 +154,61 @@ def build_prompt(batch: list[dict]) -> str:
     return "Judge suitability attributes for these products:\n\n" + "\n\n".join(lines)
 
 
-def load_api_key() -> bool:
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return True
-    env_file = BASE / ".env"
-    if env_file.exists():
-        for line in env_file.read_text().splitlines():
-            if line.startswith("ANTHROPIC_API_KEY="):
-                value = line.split("=", 1)[1].strip()
-                if value:
-                    os.environ["ANTHROPIC_API_KEY"] = value
-                    return True
-    return False
+def build_provider(name: str, timeout_s: float) -> LLMProvider:
+    """Construct the requested adapter. Raises SystemExit with a clear
+    message rather than a stack trace when its key is missing."""
+    if name == "local":
+        from app.adapters.llm.local_provider import LocalProvider
+
+        settings = get_settings()
+        return LocalProvider(base_url=settings.local_llm_base_url, timeout_s=timeout_s)
+
+    if name == "openrouter":
+        settings = get_settings()
+        if not settings.openrouter_api_key:
+            raise SystemExit(
+                "OPENROUTER_API_KEY not set. Sign up at https://openrouter.ai (free), "
+                "add the key to backend/.env, and re-run. Use --list-free-models to "
+                "see which model ids cost $0 right now."
+            )
+        from app.adapters.llm.openrouter_provider import OpenRouterProvider
+
+        return OpenRouterProvider(settings.openrouter_api_key, timeout_s)
+
+    settings = get_settings()
+    if not settings.anthropic_api_key:
+        raise SystemExit("ANTHROPIC_API_KEY not set. Add it to backend/.env and re-run.")
+    from app.adapters.llm.anthropic_provider import AnthropicProvider
+
+    return AnthropicProvider(settings.anthropic_api_key, timeout_s)
+
+
+def list_free_models() -> None:
+    """Fetch OpenRouter's current free, structured-output-capable models.
+
+    Model availability on OpenRouter changes -- this queries live rather than
+    hardcoding a list that will go stale.
+    """
+    import httpx
+
+    response = httpx.get("https://openrouter.ai/api/v1/models", timeout=30)
+    response.raise_for_status()
+    models = response.json()["data"]
+    free = [
+        m for m in models
+        if float(m["pricing"]["prompt"]) == 0
+        and float(m["pricing"]["completion"]) == 0
+        and "text" in m["architecture"]["input_modalities"]
+        and "text" in m["architecture"]["output_modalities"]
+        and m.get("supported_parameters")
+        and "structured_outputs" in m["supported_parameters"]
+    ]
+    if not free:
+        print("No free, structured-output-capable text models found right now.")
+        return
+    print(f"{len(free)} free models support structured output right now:\n")
+    for m in free:
+        print(f"  {m['id']:45s} context={m['context_length']:>7}")
 
 
 def _already_enriched(product: dict) -> bool:
@@ -177,15 +235,15 @@ def _apply(product: dict, extra: dict) -> None:
 
 
 def run_sync(
-    client: anthropic.Anthropic, all_products: list[dict], targets: list[dict]
+    provider: LLMProvider, model: str, all_products: list[dict], targets: list[dict]
 ) -> int:
     """Enrich `targets` in place on `all_products`, saving after every batch.
 
-    A batch's cost is spent the moment the API call succeeds, whether or not
-    the process is still alive to record the result -- saving only at the
-    end (the previous shape of this function) meant an interrupted run paid
-    for work it then threw away. Saving per batch bounds that loss to at most
-    one in-flight batch.
+    A batch's cost is spent (or, for a rate-limited free model, its quota
+    consumed) the moment the call succeeds, whether or not the process is
+    still alive to record the result -- saving only at the end meant an
+    interrupted run paid for work it then threw away. Saving per batch bounds
+    that loss to at most one in-flight batch.
     """
     by_id = {p["id"]: p for p in all_products}
     total = (len(targets) + BATCH_SIZE - 1) // BATCH_SIZE
@@ -195,19 +253,16 @@ def run_sync(
         batch = targets[start : start + BATCH_SIZE]
         for attempt in range(3):
             try:
-                response = client.messages.create(
-                    model=MODEL,
-                    max_tokens=4000,
+                payload = provider.structured(
                     system=SYSTEM,
-                    messages=[{"role": "user", "content": build_prompt(batch)}],
-                    output_config={
-                        "format": {"type": "json_schema", "schema": SUITABILITY_SCHEMA}
-                    },
+                    user=build_prompt(batch),
+                    schema=SUITABILITY_SCHEMA,
+                    model=model,
+                    max_tokens=4000,
                 )
-                text = next((b.text for b in response.content if b.type == "text"), "")
-                items = json.loads(text)["products"]
+                items = payload["products"]
                 break
-            except (anthropic.APIError, json.JSONDecodeError, KeyError) as exc:
+            except (LLMUnavailable, KeyError) as exc:
                 print(f"  [{index}/{total}] attempt {attempt + 1} failed: {exc}")
                 time.sleep(5)
         else:
@@ -226,11 +281,35 @@ def run_sync(
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--provider", choices=["anthropic", "openrouter", "local"], default="anthropic")
+    parser.add_argument("--model", default=None, help="Defaults: claude-sonnet-5 (anthropic), "
+                         "required for openrouter/local (e.g. z-ai/glm-5.2:free, llama3.2:3b)")
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--timeout", type=float, default=120.0)
+    parser.add_argument("--list-free-models", action="store_true",
+                         help="Query OpenRouter's current free, structured-output-capable "
+                         "models and exit -- does not touch products.json.")
+    args = parser.parse_args()
+
+    if args.list_free_models:
+        list_free_models()
+        return 0
+
     if not PRODUCTS_FILE.exists():
         print(f"Missing {PRODUCTS_FILE}.")
         return 1
-    if not load_api_key():
-        print("ANTHROPIC_API_KEY not set. Add it to backend/.env and re-run.")
+
+    model = args.model or ("claude-sonnet-5" if args.provider == "anthropic" else None)
+    if model is None:
+        print(f"--model is required for --provider {args.provider}. "
+              f"Use --list-free-models to see OpenRouter's current $0 options.")
+        return 1
+
+    try:
+        provider = build_provider(args.provider, args.timeout)
+    except SystemExit as exc:
+        print(exc)
         return 1
 
     products = json.loads(PRODUCTS_FILE.read_text())
@@ -238,19 +317,17 @@ def main() -> int:
     targets = [p for p in in_scope if not _already_enriched(p)]
     already = len(in_scope) - len(targets)
 
-    if "--limit" in sys.argv:
-        limit = int(sys.argv[sys.argv.index("--limit") + 1])
-        targets = targets[:limit]
+    if args.limit:
+        targets = targets[: args.limit]
 
     print(f"enriching {len(targets)} products ({already} already done, skipped) "
-          f"on {MODEL}")
+          f"via {args.provider}/{model}")
 
     if not BACKUP_FILE.exists():
         BACKUP_FILE.write_text(PRODUCTS_FILE.read_text())
         print(f"backed up current catalogue -> {BACKUP_FILE}")
 
-    client = anthropic.Anthropic()
-    updated = run_sync(client, products, targets)
+    updated = run_sync(provider, model, products, targets)
 
     print(f"\nupdated {updated}/{len(targets)} products this run -> {PRODUCTS_FILE}")
     if updated < len(targets):

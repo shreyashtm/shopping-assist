@@ -152,13 +152,23 @@ at all:
   outdoor-gear products where these axes are meaningful (Electronics, Home &
   Kitchen, Beauty, Gifting, Bags & Luggage and Watches & Jewellery are left
   alone -- a water-resistance judgement on a Bluetooth speaker is noise).
-  **Coverage is partial: 107/1,201 enriched, stopped short of the full run
-  to bound API spend.** The mechanism is fully correct either way -- an
+  **Coverage is partial: 116/1,201 enriched**, stopped short of the full run
+  to bound Anthropic spend. The mechanism is fully correct either way -- an
   unenriched product's suitability attributes are `null`, and `null` is
   never treated as a conflict by `suitability.evaluate()` -- so the app
   behaves safely with partial coverage, it just has suitability signal for
-  fewer products than it eventually could. Re-run the script (it skips
-  already-enriched products automatically) to extend coverage.
+  fewer products than it eventually could.
+
+  The script is provider-agnostic (`--provider anthropic|openrouter|local`,
+  same `LLMProvider` protocol the runtime uses), specifically so finishing
+  this doesn't have to mean spending API credits: `--list-free-models`
+  queries OpenRouter's current $0, structured-output-capable models live
+  (`z-ai/glm-5.2:free` and `nvidia/nemotron-3-super-120b-a12b:free` were
+  the strongest of five available at last check), and `--provider local`
+  runs against Ollama with no external account at all. Re-run the script
+  (it skips already-enriched products automatically) to extend coverage --
+  spot-check a `--limit` batch first, since judgement quality varies with
+  model size and a weak free/local model can mislabel more than it helps.
 
 Thermal mismatch was deliberately *not* moved into `suitability.py` --
 scope.md's original note framed that as the ideal shape, but it would have

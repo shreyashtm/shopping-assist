@@ -1403,10 +1403,10 @@
       "material": null,
       "temp_rating_c": null,
       "is_giftable": true,
-      "water_resistance": null,
-      "layer": null,
-      "formality": null,
-      "breathability": null
+      "water_resistance": "none",
+      "layer": "outer",
+      "formality": "smart_casual",
+      "breathability": "low"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -1442,10 +1442,10 @@
       "material": null,
       "temp_rating_c": null,
       "is_giftable": true,
-      "water_resistance": null,
-      "layer": null,
-      "formality": null,
-      "breathability": null
+      "water_resistance": "none",
+      "layer": "outer",
+      "formality": "smart_casual",
+      "breathability": "low"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -1481,10 +1481,10 @@
       "material": null,
       "temp_rating_c": null,
       "is_giftable": true,
-      "water_resistance": null,
-      "layer": null,
-      "formality": null,
-      "breathability": null
+      "water_resistance": "none",
+      "layer": "outer",
+      "formality": "casual",
+      "breathability": "low"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -1519,10 +1519,10 @@
       "material": null,
       "temp_rating_c": null,
       "is_giftable": true,
-      "water_resistance": null,
-      "layer": null,
-      "formality": null,
-      "breathability": null
+      "water_resistance": "none",
+      "layer": "outer",
+      "formality": "casual",
+      "breathability": "low"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -1557,10 +1557,10 @@
       "material": null,
       "temp_rating_c": null,
       "is_giftable": true,
-      "water_resistance": null,
-      "layer": null,
-      "formality": null,
-      "breathability": null
+      "water_resistance": "none",
+      "layer": "outer",
+      "formality": "smart_casual",
+      "breathability": "low"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -1595,10 +1595,10 @@
       "material": null,
       "temp_rating_c": null,
       "is_giftable": true,
-      "water_resistance": null,
-      "layer": null,
-      "formality": null,
-      "breathability": null
+      "water_resistance": "none",
+      "layer": "outer",
+      "formality": "smart_casual",
+      "breathability": "low"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -3626,9 +3626,9 @@
       "temp_rating_c": null,
       "is_giftable": true,
       "water_resistance": "none",
-      "layer": null,
+      "layer": "standalone",
       "formality": "formal",
-      "breathability": null
+      "breathability": "low"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -4102,9 +4102,9 @@
       "temp_rating_c": null,
       "is_giftable": false,
       "water_resistance": "none",
-      "layer": null,
-      "formality": "casual",
-      "breathability": "high"
+      "layer": "standalone",
+      "formality": "smart_casual",
+      "breathability": "low"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -6636,10 +6636,10 @@
       "material": null,
       "temp_rating_c": 0,
       "is_giftable": true,
-      "water_resistance": null,
-      "layer": null,
-      "formality": null,
-      "breathability": null
+      "water_resistance": "none",
+      "layer": "outer",
+      "formality": "casual",
+      "breathability": "low"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -6674,10 +6674,10 @@
       "material": null,
       "temp_rating_c": 5,
       "is_giftable": true,
-      "water_resistance": null,
-      "layer": null,
-      "formality": null,
-      "breathability": null
+      "water_resistance": "none",
+      "layer": "outer",
+      "formality": "smart_casual",
+      "breathability": "low"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -7282,9 +7282,9 @@
       "temp_rating_c": 5,
       "is_giftable": false,
       "water_resistance": "none",
-      "layer": "base",
+      "layer": "standalone",
       "formality": "casual",
-      "breathability": "low"
+      "breathability": "medium"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
@@ -8038,7 +8038,11 @@
       ],
       "material": "georgette",
       "temp_rating_c": null,
-      "is_giftable": true
+      "is_giftable": true,
+      "water_resistance": "none",
+      "layer": "standalone",
+      "formality": "casual",
+      "breathability": "medium"
     },
     "link_status": "verified",
     "link_verified_at": "2026-08-24T08:14:38.802007+00:00"
