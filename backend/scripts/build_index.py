@@ -5,7 +5,7 @@ Run once after the catalogue changes:
     uv run python scripts/build_index.py
 
 Embeddings are computed at build time rather than per request for the obvious
-reason -- encoding 289 products on every search would dominate latency -- and
+reason -- encoding 1,738 products on every search would dominate latency -- and
 written next to the catalogue as a plain .npy plus an id list. The id list is
 what lets the loader detect a stale index instead of silently scoring products
 against the wrong vectors.

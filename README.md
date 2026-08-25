@@ -59,9 +59,11 @@ npm run dev
 
 Open <http://localhost:3000>. API docs are at <http://localhost:8000/docs>.
 
-The app works without `ANTHROPIC_API_KEY`; it falls back to keyword
-interpretation and marks responses as `degraded_mode: true`. Add the key in
-`backend/.env` for full AI interpretation.
+The app works without any LLM key configured; it falls back to keyword
+interpretation and marks responses as `degraded_mode: true`. Set
+`LLM_PROVIDER` plus the matching key (`ANTHROPIC_API_KEY`,
+`OPENROUTER_API_KEY`, or a local Ollama server) in `backend/.env` for full AI
+interpretation.
 
 More setup detail: [setup.md](setup.md).
 
@@ -113,8 +115,8 @@ with grouped recommendations. See [api.md](api.md) for examples.
 
 - Backend: Python 3.12, FastAPI, Pydantic v2, NumPy, sentence-transformers.
 - Frontend: Next.js 16, React 19, TypeScript, Tailwind v4.
-- AI: Anthropic or OpenRouter (configurable) for structured intent
-  interpretation; deterministic explanation composition.
+- AI: Anthropic, OpenRouter, or a local Ollama model (configurable) for
+  structured intent interpretation; deterministic explanation composition.
 - Retrieval: local `all-MiniLM-L6-v2` embeddings over the committed catalogue.
 - Context: Open-Meteo for weather, elevation and climatology.
 

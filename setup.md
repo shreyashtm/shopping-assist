@@ -43,11 +43,11 @@ The frontend starts on <http://localhost:3000>.
 
 | File | Variable | Required | Purpose |
 |---|---|---:|---|
-| `backend/.env` | `LLM_PROVIDER` | No | `anthropic` (default) or `openrouter` -- picks the adapter, see [ai-approach.md](ai-approach.md) |
+| `backend/.env` | `LLM_PROVIDER` | No | `anthropic` (default), `openrouter`, or `local` -- picks the adapter, see [ai-approach.md](ai-approach.md) |
 | `backend/.env` | `ANTHROPIC_API_KEY` | No | Used when `LLM_PROVIDER=anthropic`. Without a configured provider the backend runs in transparent degraded mode |
 | `backend/.env` | `OPENROUTER_API_KEY` | No | Used when `LLM_PROVIDER=openrouter` |
 | `backend/.env` | `LOCAL_LLM_BASE_URL` | No | Used when `LLM_PROVIDER=local` (e.g. Ollama). No key needed; free, but materially weaker structured-output reliability than a hosted model |
-| `backend/.env` | `INTERPRET_MODEL` | No | Defaults to `claude-haiku-4-5`; use an OpenRouter-routed model id instead when `LLM_PROVIDER=openrouter` |
+| `backend/.env` | `INTERPRET_MODEL` | No | Defaults to `claude-haiku-4-5`, which only works with `LLM_PROVIDER=anthropic`. Set an OpenRouter-routed model id when `LLM_PROVIDER=openrouter`, or an `ollama list` model name when `LLM_PROVIDER=local` -- there is no cross-provider default |
 | `backend/.env` | `CORS_ORIGINS` | No | Comma-separated browser origins allowed to call the API |
 | `backend/.env` | `APIFY_TOKEN` | No | Only needed to rebuild raw catalogue data |
 | `frontend/.env.local` | `NEXT_PUBLIC_API_BASE_URL` | No | Defaults to `http://localhost:8000` |

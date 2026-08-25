@@ -1,7 +1,7 @@
 """In-memory product catalogue.
 
-At 289 products the entire catalogue and its embedding matrix fit comfortably in
-process memory, so there is no database here on purpose: a JSON file plus a
+At 1,738 products the entire catalogue and its embedding matrix fit comfortably
+in process memory, so there is no database here on purpose: a JSON file plus a
 numpy array answers every query this app makes, with no connection pool, no
 migration, and no second service to run. The trade is documented rather than
 hidden -- past roughly 50k products this should move to pgvector, and the

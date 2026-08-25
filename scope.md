@@ -8,7 +8,7 @@ This file captures known limitations and future scope for the project.
 
 Catalogue coverage is a smaller constraint than it used to be: the Kaggle
 ingestion (below) took the catalogue from 289 to 1,738 products and filled
-formal shoes, suits and dresses. 11 taxonomy paths are still empty, mainly
+formal shoes, suits and dresses. 12 taxonomy paths are still empty, mainly
 women's outerwear (Blazers, Jackets & Coats), Footwear/Heels, and most of
 Electronics & Accessories, Home & Kitchen and Beauty & Personal Care. Requests
 landing there get an honest `unfilled_slots` report rather than a weak
@@ -32,10 +32,39 @@ The ask-vs-assume decision comes from the interpreter and can vary. More
 deterministic post-processing should decide when missing context truly requires
 clarification.
 
-### Catalogue Misclassification
+### Catalogue Misclassification (done)
 
-Some sock products are currently classified under thermals/base layers. These
-should be re-shelved and used as regression examples for catalogue validation.
+A systematic sanity pass found 121 sock products (7% of the catalogue)
+scattered across 11 wrong buckets -- not just the 34 under
+`Thermals & Base Layers` originally noticed, but as far afield as
+`Footwear/Formal Shoes` (9), `Footwear/Casual Sneakers` (8),
+`Women's Apparel/Trousers` (6), and one under `Suits & Blazers`. Root cause:
+no `Socks` subcategory existed anywhere in `PRODUCT_TAXONOMY`, so each
+Kaggle-sourced sock landed wherever its original enrichment pass guessed
+closest -- these are `kag-` records added after `reclassify.py`'s one-time
+type/occasion-axis correction already ran, so they never got that fix.
+
+Fixed by adding `Socks & Hosiery` under both `Men's Apparel` and
+`Women's Apparel` in `PRODUCT_TAXONOMY` and re-filing all 121 by
+`attributes.gender` (unisex defaults to Men's Apparel, matching the existing
+convention for the 30 other unisex-tagged apparel items already in the
+catalogue). Two smaller single-item mis-shelvings were caught and fixed in the
+same pass: a pair of hiking shoes filed as `Outdoor & Camping Gear/Trekking
+Equipment`, and an Oxford dress shirt filed under `Sports & Fitness/Activewear`.
+A related, narrower bug was also found and fixed: an "Emideary 1 Year Sobriety
+Engraved Wallet Card" carried `occasion: ["anniversary", "birthday"]` --
+plausible-sounding but wrong for a recovery-milestone keepsake. Cleared to `[]`
+rather than force-fit into the closed `OCCASIONS` vocabulary, since no value in
+it actually describes what the item is for, and an empty tag is never treated
+as a conflict. A full sweep for the same pattern (narrow personal-milestone
+themes force-tagged with a generic occasion) across all 482 giftable/Gifting
+products, and a commemorative-keyword sweep across the full catalogue, found
+no other instances.
+
+One side effect worth noting: removing the mis-shelved sock revealed
+`Sports & Fitness/Cycling` had no real product in it at all -- it is now
+honestly empty rather than falsely showing 1 item, bringing the empty-path
+count from 11 to 12 (see Catalogue Coverage above).
 
 ### Latency
 
@@ -148,12 +177,13 @@ at all:
 - `ProductAttributes` gained `water_resistance` (none/repellent/waterproof),
   `layer` (base/mid/outer/standalone), `formality`
   (casual/smart_casual/formal), and `breathability` (low/medium/high).
-  `scripts/enrich_suitability.py` targets the 1,201 apparel/footwear/
+  `scripts/enrich_suitability.py` targets the 1,250 apparel/footwear/
   outdoor-gear products where these axes are meaningful (Electronics, Home &
   Kitchen, Beauty, Gifting, Bags & Luggage and Watches & Jewellery are left
   alone -- a water-resistance judgement on a Bluetooth speaker is noise).
-  **Coverage is partial: 116/1,201 enriched**, stopped short of the full run
-  to bound Anthropic spend. The mechanism is fully correct either way -- an
+  **Coverage is partial: 678/1,250 enriched**, stopped short of the full run
+  by OpenRouter's free-tier daily request cap (50/day on an unfunded account).
+  The mechanism is fully correct either way -- an
   unenriched product's suitability attributes are `null`, and `null` is
   never treated as a conflict by `suitability.evaluate()` -- so the app
   behaves safely with partial coverage, it just has suitability signal for

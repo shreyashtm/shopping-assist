@@ -29,11 +29,11 @@ PRODUCT_TAXONOMY: dict[str, list[str]] = {
     "Men's Apparel": [
         "Casual Shirts", "Formal Shirts", "T-Shirts", "Trousers & Chinos",
         "Jeans", "Suits & Blazers", "Jackets & Coats", "Sweaters & Fleece",
-        "Thermals & Base Layers", "Shorts",
+        "Thermals & Base Layers", "Shorts", "Socks & Hosiery",
     ],
     "Women's Apparel": [
         "Tops & T-Shirts", "Dresses", "Jeans", "Trousers", "Skirts",
-        "Blazers", "Jackets & Coats", "Sweaters & Fleece",
+        "Blazers", "Jackets & Coats", "Sweaters & Fleece", "Socks & Hosiery",
     ],
     "Ethnic Wear": [
         "Kurta Sets", "Sherwanis", "Nehru Jackets", "Lehengas", "Sarees",

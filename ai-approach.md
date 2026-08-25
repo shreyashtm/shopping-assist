@@ -5,11 +5,11 @@ deterministic or measured systems where they are more reliable.
 
 | Stage | Mechanism | Reason |
 |---|---|---|
-| Intent to search plan | Claude Haiku 4.5 with structured output (Anthropic or OpenRouter, `LLM_PROVIDER`) | Natural-language requests need world and shopping context |
+| Intent to search plan | Structured output via `LLM_PROVIDER` (Anthropic, OpenRouter, or a local Ollama model) | Natural-language requests need world and shopping context |
 | Query to product matching | Local `all-MiniLM-L6-v2` embeddings | Cheap, offline semantic retrieval |
 | Conditions | Open-Meteo | Weather and elevation should be measured when possible |
 | Explanations | Deterministic composition | Keeps reasons grounded in retrieval evidence |
-| Catalogue enrichment | Claude Batch API | One-time offline attribute enrichment |
+| Catalogue enrichment | Same `LLMProvider` protocol, offline scripts (`scripts/enrich.py`, `scripts/enrich_suitability.py`) | One-time attribute enrichment, provider-agnostic so it need not cost API credits |
 
 ## One Model Call Per Completed Search
 

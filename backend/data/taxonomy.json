@@ -12,7 +12,7 @@
         "viable": true
       },
       "Formal Shirts": {
-        "count": 37,
+        "count": 38,
         "price_range": [
           1295,
           7989
@@ -20,7 +20,7 @@
         "viable": true
       },
       "T-Shirts": {
-        "count": 78,
+        "count": 77,
         "price_range": [
           613,
           8296
@@ -44,7 +44,7 @@
         "viable": true
       },
       "Suits & Blazers": {
-        "count": 80,
+        "count": 79,
         "price_range": [
           1493,
           12487
@@ -68,9 +68,9 @@
         "viable": true
       },
       "Thermals & Base Layers": {
-        "count": 77,
+        "count": 43,
         "price_range": [
-          169,
+          569,
           4979
         ],
         "viable": true
@@ -80,6 +80,14 @@
         "price_range": [
           813,
           9130
+        ],
+        "viable": true
+      },
+      "Socks & Hosiery": {
+        "count": 111,
+        "price_range": [
+          169,
+          3319
         ],
         "viable": true
       }
@@ -110,9 +118,9 @@
         "viable": true
       },
       "Trousers": {
-        "count": 22,
+        "count": 16,
         "price_range": [
-          1078,
+          1244,
           6639
         ],
         "viable": true
@@ -138,6 +146,14 @@
         "price_range": [
           2191,
           4480
+        ],
+        "viable": true
+      },
+      "Socks & Hosiery": {
+        "count": 10,
+        "price_range": [
+          399,
+          2071
         ],
         "viable": true
       }
@@ -194,15 +210,15 @@
     },
     "Footwear": {
       "Formal Shoes": {
-        "count": 28,
+        "count": 19,
         "price_range": [
-          753,
+          2240,
           11620
         ],
         "viable": true
       },
       "Casual Sneakers": {
-        "count": 90,
+        "count": 82,
         "price_range": [
           995,
           14027
@@ -226,9 +242,9 @@
         "viable": true
       },
       "Sandals & Floaters": {
-        "count": 70,
+        "count": 62,
         "price_range": [
-          995,
+          1069,
           11620
         ],
         "viable": true
@@ -332,15 +348,15 @@
         "viable": true
       },
       "Trekking Equipment": {
-        "count": 5,
+        "count": 1,
         "price_range": [
-          1576,
+          47227,
           47227
         ],
-        "viable": true
+        "viable": false
       },
       "Outdoor Accessories": {
-        "count": 21,
+        "count": 19,
         "price_range": [
           199,
           8843
@@ -370,19 +386,15 @@
         "viable": false
       },
       "Activewear": {
-        "count": 103,
+        "count": 55,
         "price_range": [
-          686,
-          6058
+          945,
+          5806
         ],
         "viable": true
       },
       "Cycling": {
-        "count": 1,
-        "price_range": [
-          2486,
-          2486
-        ],
+        "count": 0,
         "viable": false
       }
     },
@@ -517,6 +529,7 @@
       "Women's Apparel/Jackets & Coats",
       "Footwear/Heels",
       "Sports & Fitness/Cardio",
+      "Sports & Fitness/Cycling",
       "Electronics & Accessories/Audio",
       "Electronics & Accessories/Charging & Power",
       "Home & Kitchen/Decor",
@@ -527,7 +540,7 @@
     ],
     "thin": [
       "Ethnic Wear/Ethnic Accessories (1)",
-      "Sports & Fitness/Cycling (1)",
+      "Outdoor & Camping Gear/Trekking Equipment (1)",
       "Electronics & Accessories/Mobile Accessories (1)",
       "Gifting/Hampers (3)"
     ]

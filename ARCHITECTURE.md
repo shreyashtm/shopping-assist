@@ -236,10 +236,14 @@ not silently hide products or fabricate unavailable facts.
 The LLM is behind the `LLMProvider` protocol
 (`backend/app/adapters/llm/base.py`), so the interpreter and orchestrator do
 not know or care which implementation is live. `LLM_PROVIDER` selects it:
-`anthropic` (default, `AnthropicProvider`) or `openrouter`
-(`OpenRouterProvider`, an OpenAI-compatible chat-completions client). Both
-speak the same `structured(system, user, schema, model, ...)` operation and
-turn a transport failure into `LLMUnavailable`.
+`anthropic` (default, `AnthropicProvider`), `openrouter` (`OpenRouterProvider`,
+an OpenAI-compatible chat-completions client), or `local` (`LocalProvider`,
+talking to an Ollama-compatible endpoint at `LOCAL_LLM_BASE_URL`, no API key).
+All three speak the same `structured(system, user, schema, model, ...)`
+operation and turn a transport failure into `LLMUnavailable`. `INTERPRET_MODEL`
+must be a model id valid for whichever provider is selected -- it does not
+default sensibly across providers (the class default,
+`claude-haiku-4-5`, is Anthropic-only).
 
 The provider is optional either way. If its key is absent or it fails, the
 system uses `offline_interpret()` and marks the response as

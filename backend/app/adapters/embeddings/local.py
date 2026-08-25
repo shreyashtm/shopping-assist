@@ -3,7 +3,7 @@
 Local rather than hosted for a specific reason: Anthropic has no embedding
 endpoint, so a hosted embedder would mean a second vendor and a second API key
 for what is a solved, cheap, offline problem. all-MiniLM-L6-v2 is ~90MB, encodes
-the whole 289-product catalogue in a second or two, and costs nothing per query.
+the whole 1,738-product catalogue in a second or two, and costs nothing per query.
 """
 
 from functools import lru_cache
