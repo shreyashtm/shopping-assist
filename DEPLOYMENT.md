@@ -56,9 +56,10 @@ RAM**; a 512 MB free tier will likely OOM on startup.
 
 **Latency is dominated by which interpretation model you configure**, not by
 the app's own work. A full warm search on `claude-haiku-4-5` measures ~7.5s
-end-to-end; the free-tier model took 37-67s for the interpretation call alone
-and failed roughly half the time. Set `LLM_PROVIDER` to a fast model and keep
-the free one as `LLM_FALLBACK_PROVIDER`, not the reverse. See
+end-to-end; every OpenRouter free model tested managed at best 1 successful
+interpretation in 4, at 37-67s each. Use a **paid** model. Do not configure a
+free model as `LLM_FALLBACK_PROVIDER` either -- it adds ~40s of waiting and
+then fails anyway, which is worse than having no fallback. See
 [performance.md](performance.md) for the full measurements.
 
 ---
@@ -81,12 +82,16 @@ Web-dashboard flow, no CLI or login needed.
 
    | Key | Value |
    |---|---|
-   | `LLM_PROVIDER` | `anthropic` (fast) or `openrouter` (free but slow — see the latency note above) |
-   | `INTERPRET_MODEL` | a model id valid for *that* provider, e.g. `claude-haiku-4-5` |
-   | `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY` | whichever the provider needs |
-   | `LLM_FALLBACK_PROVIDER` | optional second provider, must differ from the primary |
-   | `FALLBACK_INTERPRET_MODEL` | required if a fallback is set — a model id for the *fallback's* provider |
-   | `CORS_ORIGINS` | the Vercel URL from step 2, e.g. `https://your-project.vercel.app` |
+   | `LLM_PROVIDER` | `anthropic` |
+   | `INTERPRET_MODEL` | `claude-haiku-4-5` — must be valid for *that* provider |
+   | `ANTHROPIC_API_KEY` | your key |
+   | `INTERPRET_TIMEOUT_S` | `90`. The 30s default aborts calls that would have succeeded on throttled hosting |
+   | `CORS_ORIGINS` | the Vercel URL from step 3, e.g. `https://your-project.vercel.app` |
+
+   Optional, and only worth setting if the second provider is also **paid**:
+   `LLM_FALLBACK_PROVIDER` (must differ from the primary) plus
+   `FALLBACK_INTERPRET_MODEL` (a model id for the *fallback's* provider, not
+   the primary's).
 
 5. Settings → **Networking** → **Generate Domain**. Railway assigns no public
    URL until you ask for one — the `*.railway.internal` address it shows by
@@ -234,5 +239,6 @@ Done for the current deployment — the URLs are in [README.md](README.md) and
 | Every response is `degraded_mode: true` | No LLM key set for the selected `LLM_PROVIDER`, credit exhausted, or `INTERPRET_MODEL` is not a valid id for that provider |
 | `llm_configured: true` but searches still degrade | `INTERPRET_MODEL` names a model the provider rejects — e.g. an embedding model (`...-embedding-...`) where a chat model is required |
 | Health check itself is slow (10s+) or times out | Instance under-resourced for `torch` + `sentence-transformers`; move to ≥1 GB RAM |
-| Searches take a minute or more | A slow free-tier interpretation model. Put a fast model in `LLM_PROVIDER` and demote the free one to `LLM_FALLBACK_PROVIDER` |
+| Searches take a minute or more | A free-tier interpretation model. Switch to a paid one; do not keep the free model as a fallback |
+| `degraded_mode: true` with `llm_calls: 0`, after ~30s or more | `INTERPRET_TIMEOUT_S` is aborting a call that would have succeeded. Set 90 on throttled hosting |
 | Build fails: "could not determine how to build the app" | Root directory not set to `backend` on the platform |

@@ -48,6 +48,7 @@ The frontend starts on <http://localhost:3000>.
 | `backend/.env` | `OPENROUTER_API_KEY` | No | Used when `LLM_PROVIDER=openrouter` |
 | `backend/.env` | `LOCAL_LLM_BASE_URL` | No | Used when `LLM_PROVIDER=local` (e.g. Ollama). No key needed; free, but materially weaker structured-output reliability than a hosted model |
 | `backend/.env` | `INTERPRET_MODEL` | No | Defaults to `claude-haiku-4-5`, which only works with `LLM_PROVIDER=anthropic`. Set an OpenRouter-routed model id when `LLM_PROVIDER=openrouter`, or an `ollama list` model name when `LLM_PROVIDER=local` -- there is no cross-provider default |
+| `backend/.env` | `INTERPRET_TIMEOUT_S` | No | Seconds allowed for the one interpretation call (default 30). A real interpretation measures ~11s locally but 30-50s+ on throttled free-tier hosting, where the default silently degrades every search -- set 90 there |
 | `backend/.env` | `LLM_FALLBACK_PROVIDER` | No | `anthropic`, `openrouter`, or `local` -- a second provider tried when the primary is unconfigured or a live call fails. Must differ from `LLM_PROVIDER` and needs its own key set |
 | `backend/.env` | `FALLBACK_INTERPRET_MODEL` | No | Required if `LLM_FALLBACK_PROVIDER` is set -- a model id valid for *that* provider, not `INTERPRET_MODEL`'s |
 | `backend/.env` | `CORS_ORIGINS` | No | Comma-separated browser origins allowed to call the API |
