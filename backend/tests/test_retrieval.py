@@ -55,10 +55,22 @@ TREK_BUCKET = Bucket(
 
 # --- hard filters ---------------------------------------------------------
 
-def test_price_filters_exclude_out_of_range():
+def test_only_the_price_ceiling_excludes():
+    """Deliberate change of contract, not a weakened test.
+
+    price_min used to exclude, and that emptied five required buckets on a
+    real trek request: the shopper picked "Rs 10,000 - Rs 25,000" and every
+    one of the catalogue's 43 thermals, 111 socks and 6 navigation items
+    costs under Rs 10,000, so the floor deleted those categories entirely.
+
+    A budget range says what someone is willing to spend, not what they
+    insist on spending. The ceiling stays a hard constraint; the floor moved
+    to `score_product` as a ranking preference, so cheaper products are
+    ordered lower but still shown.
+    """
     product = make_product("p", price_inr=5000)
     assert not passes_filters(product, QueryFilters(price_max=3000))
-    assert not passes_filters(product, QueryFilters(price_min=6000))
+    assert passes_filters(product, QueryFilters(price_min=6000))
     assert passes_filters(product, QueryFilters(price_min=1000, price_max=6000))
 
 
@@ -809,3 +821,82 @@ def test_no_penalty_when_the_bucket_expresses_no_use_case():
     in_party_bucket = score_product(party, semantic=0.60, bucket=PARTY_BUCKET, context=MILD)
 
     assert in_party_bucket.score >= 0.60 * 0.99
+
+
+# --- price_min orders, it does not exclude ---------------------------------
+#
+# Reported from the live app. A shopper picked "Rs 10,000 - Rs 25,000" for a
+# Hampta Pass trek and five required buckets came back empty: the catalogue
+# holds 43 thermals, 111 socks and 6 navigation items, and *every one* of them
+# costs under Rs 10,000. Nothing in those categories costs Rs 10,000, so the
+# floor deleted the entire category.
+#
+# A budget range states what someone is willing to spend, not what they insist
+# on spending. price_max is a real constraint -- "I cannot afford more than
+# this". price_min is a preference, and a shopper is never harmed by being
+# shown a cheaper item that fits. It belongs on the ranking side, with the
+# boosts, not on the gate side with catalogue_paths.
+
+
+def test_price_min_does_not_exclude_cheaper_products():
+    cheap = make_product("cheap", price_inr=500)
+
+    assert passes_filters(cheap, QueryFilters(price_min=10000, price_max=25000))
+
+
+def test_price_max_still_excludes():
+    """The genuine constraint is untouched: too expensive is still too
+    expensive."""
+    dear = make_product("dear", price_inr=30000)
+
+    assert not passes_filters(dear, QueryFilters(price_min=10000, price_max=25000))
+
+
+def test_a_product_inside_the_stated_range_outranks_one_far_below():
+    """The preference survives as ordering: when both exist, the in-budget
+    product comes first."""
+    in_range = make_product("in_range", price_inr=12000)
+    far_below = make_product("far_below", price_inr=400)
+    filters = QueryFilters(price_min=10000, price_max=25000)
+
+    scored_in = score_product(in_range, 0.60, TREK_BUCKET, MILD, filters=filters)
+    scored_below = score_product(far_below, 0.60, TREK_BUCKET, MILD, filters=filters)
+
+    assert scored_in.score > scored_below.score
+
+
+def test_no_price_preference_leaves_scores_alone():
+    product = make_product("p", price_inr=400)
+
+    with_filter = score_product(product, 0.60, TREK_BUCKET, MILD, filters=QueryFilters())
+    assert with_filter.score >= 0.60 * 0.99
+
+
+def test_below_budget_products_are_ordered_by_closeness_to_the_floor():
+    """Being under budget is a matter of degree, not a yes/no.
+
+    If a shopper asks for Rs 10,000-25,000 and nothing is in range, a
+    Rs 9,000 jacket is very nearly what they asked for while a Rs 500 one is
+    not. A flat in-range/out-of-range boost scores those two identically,
+    which is why the preference is scaled by how close the price gets to the
+    stated floor.
+    """
+    filters = QueryFilters(price_min=10000, price_max=25000)
+    near = make_product("near", price_inr=9000)
+    far = make_product("far", price_inr=500)
+
+    scored_near = score_product(near, 0.60, TREK_BUCKET, MILD, filters=filters)
+    scored_far = score_product(far, 0.60, TREK_BUCKET, MILD, filters=filters)
+
+    assert scored_near.score > scored_far.score
+
+
+def test_in_budget_still_beats_the_closest_below_budget_product():
+    filters = QueryFilters(price_min=10000, price_max=25000)
+    inside = make_product("inside", price_inr=10500)
+    just_under = make_product("just_under", price_inr=9800)
+
+    scored_in = score_product(inside, 0.60, TREK_BUCKET, MILD, filters=filters)
+    scored_under = score_product(just_under, 0.60, TREK_BUCKET, MILD, filters=filters)
+
+    assert scored_in.score > scored_under.score

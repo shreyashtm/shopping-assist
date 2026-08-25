@@ -57,10 +57,13 @@ RAM**; a 512 MB free tier will likely OOM on startup.
 **Latency is dominated by which interpretation model you configure**, not by
 the app's own work. A full warm search on `claude-haiku-4-5` measures ~7.5s
 end-to-end; every OpenRouter free model tested managed at best 1 successful
-interpretation in 4, at 37-67s each. Use a **paid** model. Do not configure a
-free model as `LLM_FALLBACK_PROVIDER` either -- it adds ~40s of waiting and
-then fails anyway, which is worse than having no fallback. See
-[performance.md](performance.md) for the full measurements.
+interpretation in 4, at 37-67s each. Use a **paid** model as the primary.
+
+A free model is still defensible as `LLM_FALLBACK_PROVIDER`: it only engages
+when the primary actually fails, so it costs nothing in the normal path, and a
+1-in-4 chance of a real answer beats keyword matching. The premium is that an
+outage takes ~40s longer to surface. Resilience or speed -- both are
+reasonable, but choose deliberately. See [performance.md](performance.md).
 
 ---
 

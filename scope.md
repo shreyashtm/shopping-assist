@@ -100,6 +100,23 @@ have no groups because they are asking a question, not failing to answer one.
 Worth noting the general lesson: the cache made a **non-deterministic** failure
 look **deterministic**, which is what made it confusing to diagnose.
 
+### Budget Floors Deleted Whole Categories (done)
+
+A shopper picked "Rs 10,000 - Rs 25,000" for a Hampta Pass trek and five
+required buckets came back empty. The catalogue holds 43 thermals, 111 socks
+and 6 navigation items, and *every one* of them costs under Rs 10,000 -- so
+applying `price_min` as a hard filter deleted those categories outright, while
+boots and luggage survived because they happen to be expensive.
+
+A budget range states what someone is willing to spend, not what they insist
+on spending. `price_max` remains a genuine constraint; `price_min` moved to
+`score_product()` as a ranking preference, scaled by how close a product gets
+to the stated floor -- so a Rs 9,000 jacket outranks a Rs 500 one when the
+floor is Rs 10,000, an in-range product outranks both, and nothing is hidden.
+This is the same gate-versus-boost distinction the module docstring already
+draws for attributes: exclusions are for what a product *is*, preferences are
+for how well it fits.
+
 ### Latency
 
 Almost all of it is the single interpretation call, and the dominant factor is

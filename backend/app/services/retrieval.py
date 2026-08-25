@@ -56,6 +56,11 @@ BOOST_OCCASION = 0.12
 BOOST_SEASON = 0.08
 BOOST_TEMP_FIT = 0.25
 BOOST_POPULARITY = 0.05
+# Prefers a product inside a stated budget range over one far below it,
+# without ever excluding the cheaper one. Small on purpose: being under budget
+# is a mild negative signal about fit ("is this the quality I asked for?"),
+# never a disqualifying one.
+BOOST_IN_BUDGET = 0.10
 
 # Semantic floors, relaxed deliberately once category gating landed.
 #
@@ -255,8 +260,13 @@ def passes_filters(product: Product, filters: QueryFilters) -> bool:
     boundary is what keeps that model-phrasing variance from reaching the
     shopper as an empty screen.
     """
-    if filters.price_min is not None and product.price_inr < filters.price_min:
-        return False
+    # Only the ceiling is a constraint. A shopper who picks "Rs 10,000 -
+    # Rs 25,000" is saying what they are willing to spend, not refusing
+    # anything cheaper -- and treating the floor as a gate emptied five
+    # required buckets on a real trek request, because every one of the
+    # catalogue's 43 thermals, 111 socks and 6 navigation items costs under
+    # Rs 10,000. The floor survives as a ranking preference in
+    # `score_product`, which is where a preference belongs.
     if filters.price_max is not None and product.price_inr > filters.price_max:
         return False
     # "unisex" means two different things depending which side of this check
@@ -473,6 +483,7 @@ def score_product(
     bucket: Bucket,
     context: ResolvedContext,
     constraints: ContextConstraints | None = None,
+    filters: QueryFilters | None = None,
 ) -> ScoredProduct:
     """Fuse semantic similarity with attribute evidence.
 
@@ -565,6 +576,21 @@ def score_product(
             (EVIDENCE_MATERIAL, f"built with {product.attributes.material.lower()}")
         )
 
+    # Budget preference, not a filter. `passes_filters` no longer excludes on
+    # price_min, so this is what keeps a stated range meaningful: an in-range
+    # product outranks one far below it, while the cheaper one still appears.
+    if filters is not None and filters.price_min:
+        if product.price_inr >= filters.price_min:
+            boost += BOOST_IN_BUDGET
+        else:
+            # Graded, not binary. Asked for Rs 10,000-25,000, a Rs 9,000
+            # jacket is very nearly what the shopper wanted while a Rs 500 one
+            # is not, and a flat in/out boost scores those identically. Scaling
+            # by how close the price gets to the floor orders the shortfall
+            # sensibly, and always leaves an in-range product ahead of every
+            # product beneath it.
+            boost += BOOST_IN_BUDGET * (product.price_inr / filters.price_min)
+
     # Social proof, compressed hard: this should break ties between comparable
     # products, never lift a poor match above a good one.
     if product.rating and product.review_count:
@@ -649,7 +675,12 @@ def search_bucket(
             continue
         scored.append(
             score_product(
-                product, float(semantic_scores[index]), bucket, context, constraints
+                product,
+                float(semantic_scores[index]),
+                bucket,
+                context,
+                constraints,
+                filters=bucket_filters,
             )
         )
 
