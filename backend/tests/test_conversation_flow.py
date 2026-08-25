@@ -24,7 +24,7 @@ import pytest
 from app.core.cache import response_cache
 from app.schemas.recommend import RecommendRequest
 from app.services.catalogue import Catalogue
-from app.services.recommend import MAX_CLARIFY_ANSWERS, recommend
+from app.services.recommend import MAX_BUCKETS_FOR_PREVIEW, MAX_CLARIFY_ANSWERS, recommend
 
 TODAY = date(2026, 8, 25)
 
@@ -219,3 +219,76 @@ def test_provider_that_never_stops_asking_still_reaches_results(catalogue):
         "an endlessly-asking model must still be forced to a recommendation"
     )
     assert response.groups, "forcing results must not mean forcing an empty screen"
+
+
+def _bucket(name: str, path: str, phrase: str) -> dict:
+    return {
+        "name": name,
+        "search_phrases": [phrase],
+        "why_needed": "Could be a fit.",
+        "role": "optional",
+        "catalogue_paths": [path],
+        "priority": 2,
+        "max_items": 4,
+    }
+
+
+_SCATTERED_BUCKETS = [
+    _bucket("Apparel", "Men's Apparel/T-Shirts", "t-shirt"),
+    _bucket("Footwear", "Footwear/Casual Sneakers", "sneakers"),
+    _bucket("Jewellery", "Watches & Jewellery/Watches", "watch"),
+    _bucket("Bags", "Bags & Luggage/Wallets", "wallet"),
+    _bucket("Beauty", "Beauty & Personal Care/Fragrance", "perfume"),
+]
+
+
+def test_wide_open_request_gets_questions_only_not_a_scattered_preview(catalogue):
+    """The gift-for-my-sister case: with no category signal at all, the
+    interpreter improvises across unrelated life categories. Real matches
+    exist in every one of those buckets (each catalogue_paths entry is a
+    populated category), which is exactly why this must be an explicit
+    suppression and not just 'nothing matched' -- a request this undirected
+    should ask before dumping 15-20 disconnected 'closest match' picks on
+    the shopper."""
+    assert len(_SCATTERED_BUCKETS) > MAX_BUCKETS_FOR_PREVIEW
+    plan = {
+        **_TSHIRT_PLAN,
+        "buckets": _SCATTERED_BUCKETS,
+        "needs_clarification": True,
+        "questions": [_question(
+            "recipient_type", "What kind of gift?",
+            [("Apparel", "category:Men's Apparel"), ("Jewellery", "category:Watches & Jewellery")],
+        )],
+    }
+    provider = ScriptedProvider([plan])
+
+    response = recommend(
+        RecommendRequest(query="a gift for my sister"), catalogue, provider, today=TODAY
+    )
+
+    assert response.mode == "clarify"
+    assert response.questions
+    assert response.groups == [], "a scattered, unfocused request must not preview products"
+    assert response.unfilled_slots == []
+
+
+def test_focused_multi_bucket_request_still_previews_at_the_threshold(catalogue):
+    """The boundary: exactly MAX_BUCKETS_FOR_PREVIEW cohesive buckets (e.g. a
+    trek's layering/footwear/navigation) is still focused enough to preview --
+    the suppression is about breadth, not about needing more than one bucket
+    at all."""
+    buckets = _SCATTERED_BUCKETS[:MAX_BUCKETS_FOR_PREVIEW]
+    plan = {
+        **_TSHIRT_PLAN,
+        "buckets": buckets,
+        "needs_clarification": True,
+        "questions": [_question("budget", "Budget?", [("Any", "price_min:0")])],
+    }
+    provider = ScriptedProvider([plan])
+
+    response = recommend(
+        RecommendRequest(query="trekking gear"), catalogue, provider, today=TODAY
+    )
+
+    assert response.mode == "clarify"
+    assert response.groups, "a focused multi-bucket request should still preview"

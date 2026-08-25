@@ -68,6 +68,19 @@ logger = logging.getLogger(__name__)
 # (see `interpreter.SYSTEM` and `StructuredQuery._cap_questions`).
 MAX_CLARIFY_ANSWERS = 4
 
+# A clarify response previews products alongside its questions -- except when
+# the request is too undirected for a preview to mean anything. "Trekking
+# gear, no dates yet" still gets 3-4 cohesive buckets (layering, footwear,
+# navigation) worth showing; "a gift for my sister" with nothing else stated
+# gets the interpreter improvising across unrelated life categories (apparel,
+# jewellery, bags, beauty, home) because it has no real signal to focus on.
+# Past this many buckets, showing the preview stopped being "a useful initial
+# outcome" and started being 20+ weak "closest match" picks the shopper has
+# to wade through before reaching the two questions that would have actually
+# focused the search. The system prompt's own bucket-count guidance ("split
+# into 2-5 buckets") is the source for where "focused" ends.
+MAX_BUCKETS_FOR_PREVIEW = 3
+
 
 def _with_overrides(inferred: QueryFilters, override: QueryFilters | None) -> QueryFilters:
     """Apply client-supplied filters on top of the interpreted ones.
@@ -416,8 +429,11 @@ def recommend_events(
     # Retrieval already ran above, so a clarify response carries whatever
     # products are already good matches alongside the follow-up questions --
     # a turn never ends with only a question and no recommendation when the
-    # catalogue has something to offer.
+    # request was focused enough for that preview to be useful. A request
+    # broad enough to spread across many buckets gets questions only; the
+    # preview would be scattered "closest match" filler, not a real answer.
     if structured.needs_clarification and not payload.skip_clarification:
+        focused = len(structured.buckets) <= MAX_BUCKETS_FOR_PREVIEW
         yield "result", _cache_and_return(key, RecommendResponse(
             query_id=str(uuid.uuid4()),
             mode="clarify",
@@ -426,8 +442,8 @@ def recommend_events(
             assumptions=structured.assumptions,
             context_variables=context_variables,
             questions=structured.questions,
-            groups=groups,
-            unfilled_slots=unfilled,
+            groups=groups if focused else [],
+            unfilled_slots=unfilled if focused else [],
             meta=ResponseMeta(
                 latency_ms=elapsed(), llm_calls=llm_calls,
                 degraded_mode=degraded, catalogue_size=len(catalogue), notes=notes,
