@@ -7,8 +7,9 @@ name: Keep Render backend warm
 # cost, at the price of ~144 tiny requests/day against GitHub's free Actions
 # minutes.
 on:
-  schedule:
-    - cron: "*/10 * * * *"
+  # Paused during the Render -> Railway migration. Uncomment to re-enable.
+  # schedule:
+  #   - cron: "*/10 * * * *"
   workflow_dispatch: {}
 
 jobs:
