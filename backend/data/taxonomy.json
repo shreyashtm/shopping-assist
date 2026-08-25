@@ -1,0 +1,535 @@
+{
+  "product_count": 1738,
+  "min_viable": 4,
+  "categories": {
+    "Men's Apparel": {
+      "Casual Shirts": {
+        "count": 74,
+        "price_range": [
+          498,
+          10375
+        ],
+        "viable": true
+      },
+      "Formal Shirts": {
+        "count": 37,
+        "price_range": [
+          1295,
+          7989
+        ],
+        "viable": true
+      },
+      "T-Shirts": {
+        "count": 78,
+        "price_range": [
+          613,
+          8296
+        ],
+        "viable": true
+      },
+      "Trousers & Chinos": {
+        "count": 57,
+        "price_range": [
+          1576,
+          10246
+        ],
+        "viable": true
+      },
+      "Jeans": {
+        "count": 59,
+        "price_range": [
+          1655,
+          7217
+        ],
+        "viable": true
+      },
+      "Suits & Blazers": {
+        "count": 80,
+        "price_range": [
+          1493,
+          12487
+        ],
+        "viable": true
+      },
+      "Jackets & Coats": {
+        "count": 97,
+        "price_range": [
+          668,
+          47227
+        ],
+        "viable": true
+      },
+      "Sweaters & Fleece": {
+        "count": 56,
+        "price_range": [
+          499,
+          16517
+        ],
+        "viable": true
+      },
+      "Thermals & Base Layers": {
+        "count": 77,
+        "price_range": [
+          169,
+          4979
+        ],
+        "viable": true
+      },
+      "Shorts": {
+        "count": 63,
+        "price_range": [
+          813,
+          9130
+        ],
+        "viable": true
+      }
+    },
+    "Women's Apparel": {
+      "Tops & T-Shirts": {
+        "count": 11,
+        "price_range": [
+          188,
+          2323
+        ],
+        "viable": true
+      },
+      "Dresses": {
+        "count": 4,
+        "price_range": [
+          829,
+          5228
+        ],
+        "viable": true
+      },
+      "Jeans": {
+        "count": 12,
+        "price_range": [
+          639,
+          1826
+        ],
+        "viable": true
+      },
+      "Trousers": {
+        "count": 22,
+        "price_range": [
+          1078,
+          6639
+        ],
+        "viable": true
+      },
+      "Skirts": {
+        "count": 58,
+        "price_range": [
+          995,
+          3568
+        ],
+        "viable": true
+      },
+      "Blazers": {
+        "count": 0,
+        "viable": false
+      },
+      "Jackets & Coats": {
+        "count": 0,
+        "viable": false
+      },
+      "Sweaters & Fleece": {
+        "count": 6,
+        "price_range": [
+          2191,
+          4480
+        ],
+        "viable": true
+      }
+    },
+    "Ethnic Wear": {
+      "Kurta Sets": {
+        "count": 16,
+        "price_range": [
+          894,
+          2159
+        ],
+        "viable": true
+      },
+      "Sherwanis": {
+        "count": 8,
+        "price_range": [
+          3999,
+          14999
+        ],
+        "viable": true
+      },
+      "Nehru Jackets": {
+        "count": 8,
+        "price_range": [
+          725,
+          2182
+        ],
+        "viable": true
+      },
+      "Lehengas": {
+        "count": 8,
+        "price_range": [
+          1245,
+          1955
+        ],
+        "viable": true
+      },
+      "Sarees": {
+        "count": 8,
+        "price_range": [
+          429,
+          1431
+        ],
+        "viable": true
+      },
+      "Ethnic Accessories": {
+        "count": 1,
+        "price_range": [
+          3568,
+          3568
+        ],
+        "viable": false
+      }
+    },
+    "Footwear": {
+      "Formal Shoes": {
+        "count": 28,
+        "price_range": [
+          753,
+          11620
+        ],
+        "viable": true
+      },
+      "Casual Sneakers": {
+        "count": 90,
+        "price_range": [
+          995,
+          14027
+        ],
+        "viable": true
+      },
+      "Sports Shoes": {
+        "count": 32,
+        "price_range": [
+          896,
+          16552
+        ],
+        "viable": true
+      },
+      "Boots": {
+        "count": 35,
+        "price_range": [
+          1245,
+          41085
+        ],
+        "viable": true
+      },
+      "Sandals & Floaters": {
+        "count": 70,
+        "price_range": [
+          995,
+          11620
+        ],
+        "viable": true
+      },
+      "Heels": {
+        "count": 0,
+        "viable": false
+      },
+      "Flats": {
+        "count": 50,
+        "price_range": [
+          414,
+          23157
+        ],
+        "viable": true
+      },
+      "Ethnic Footwear": {
+        "count": 16,
+        "price_range": [
+          362,
+          1699
+        ],
+        "viable": true
+      }
+    },
+    "Bags & Luggage": {
+      "Backpacks": {
+        "count": 19,
+        "price_range": [
+          599,
+          11993
+        ],
+        "viable": true
+      },
+      "Handbags & Clutches": {
+        "count": 9,
+        "price_range": [
+          449,
+          9684
+        ],
+        "viable": true
+      },
+      "Luggage & Trolleys": {
+        "count": 130,
+        "price_range": [
+          580,
+          124085
+        ],
+        "viable": true
+      },
+      "Duffels": {
+        "count": 49,
+        "price_range": [
+          2489,
+          37765
+        ],
+        "viable": true
+      },
+      "Wallets": {
+        "count": 73,
+        "price_range": [
+          486,
+          21995
+        ],
+        "viable": true
+      }
+    },
+    "Watches & Jewellery": {
+      "Watches": {
+        "count": 11,
+        "price_range": [
+          408,
+          26020
+        ],
+        "viable": true
+      },
+      "Jewellery": {
+        "count": 35,
+        "price_range": [
+          414,
+          3991
+        ],
+        "viable": true
+      }
+    },
+    "Outdoor & Camping Gear": {
+      "Camp & Sleep": {
+        "count": 8,
+        "price_range": [
+          949,
+          2999
+        ],
+        "viable": true
+      },
+      "Navigation & Safety": {
+        "count": 6,
+        "price_range": [
+          279,
+          1599
+        ],
+        "viable": true
+      },
+      "Trekking Equipment": {
+        "count": 5,
+        "price_range": [
+          1576,
+          47227
+        ],
+        "viable": true
+      },
+      "Outdoor Accessories": {
+        "count": 21,
+        "price_range": [
+          199,
+          8843
+        ],
+        "viable": true
+      }
+    },
+    "Sports & Fitness": {
+      "Yoga": {
+        "count": 11,
+        "price_range": [
+          203,
+          2489
+        ],
+        "viable": true
+      },
+      "Strength Training": {
+        "count": 8,
+        "price_range": [
+          151,
+          6499
+        ],
+        "viable": true
+      },
+      "Cardio": {
+        "count": 0,
+        "viable": false
+      },
+      "Activewear": {
+        "count": 103,
+        "price_range": [
+          686,
+          6058
+        ],
+        "viable": true
+      },
+      "Cycling": {
+        "count": 1,
+        "price_range": [
+          2486,
+          2486
+        ],
+        "viable": false
+      }
+    },
+    "Electronics & Accessories": {
+      "Audio": {
+        "count": 0,
+        "viable": false
+      },
+      "Wearables": {
+        "count": 10,
+        "price_range": [
+          1499,
+          5299
+        ],
+        "viable": true
+      },
+      "Charging & Power": {
+        "count": 0,
+        "viable": false
+      },
+      "Mobile Accessories": {
+        "count": 1,
+        "price_range": [
+          826,
+          826
+        ],
+        "viable": false
+      }
+    },
+    "Home & Kitchen": {
+      "Cookware": {
+        "count": 8,
+        "price_range": [
+          1219,
+          3199
+        ],
+        "viable": true
+      },
+      "Appliances": {
+        "count": 9,
+        "price_range": [
+          1599,
+          7299
+        ],
+        "viable": true
+      },
+      "Bedding": {
+        "count": 5,
+        "price_range": [
+          239,
+          4979
+        ],
+        "viable": true
+      },
+      "Decor": {
+        "count": 0,
+        "viable": false
+      },
+      "Storage": {
+        "count": 0,
+        "viable": false
+      }
+    },
+    "Beauty & Personal Care": {
+      "Skincare": {
+        "count": 7,
+        "price_range": [
+          177,
+          1060
+        ],
+        "viable": true
+      },
+      "Haircare": {
+        "count": 0,
+        "viable": false
+      },
+      "Grooming": {
+        "count": 0,
+        "viable": false
+      },
+      "Fragrance": {
+        "count": 5,
+        "price_range": [
+          419,
+          3699
+        ],
+        "viable": true
+      },
+      "Makeup": {
+        "count": 0,
+        "viable": false
+      }
+    },
+    "Gifting": {
+      "Hampers": {
+        "count": 3,
+        "price_range": [
+          1299,
+          5299
+        ],
+        "viable": false
+      },
+      "Gourmet & Dry Fruits": {
+        "count": 8,
+        "price_range": [
+          589,
+          2799
+        ],
+        "viable": true
+      },
+      "Keepsakes": {
+        "count": 26,
+        "price_range": [
+          580,
+          6722
+        ],
+        "viable": true
+      },
+      "Home Fragrance": {
+        "count": 6,
+        "price_range": [
+          159,
+          563
+        ],
+        "viable": true
+      }
+    }
+  },
+  "coverage": {
+    "empty": [
+      "Women's Apparel/Blazers",
+      "Women's Apparel/Jackets & Coats",
+      "Footwear/Heels",
+      "Sports & Fitness/Cardio",
+      "Electronics & Accessories/Audio",
+      "Electronics & Accessories/Charging & Power",
+      "Home & Kitchen/Decor",
+      "Home & Kitchen/Storage",
+      "Beauty & Personal Care/Haircare",
+      "Beauty & Personal Care/Grooming",
+      "Beauty & Personal Care/Makeup"
+    ],
+    "thin": [
+      "Ethnic Wear/Ethnic Accessories (1)",
+      "Sports & Fitness/Cycling (1)",
+      "Electronics & Accessories/Mobile Accessories (1)",
+      "Gifting/Hampers (3)"
+    ]
+  }
+}
