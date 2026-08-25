@@ -34,6 +34,15 @@ from a green build log:
 - **Railway needs the root directory set to `backend`.** Otherwise its builder
   analyses the repo root, finds no Python project, and fails with "could not
   determine how to build the app".
+- **`INTERPRET_TIMEOUT_S` (default 30s) is too low for throttled hosting.** A
+  real interpretation takes ~11s locally but 30-50s+ on free-tier shared CPU,
+  so the default silently aborted calls that would have succeeded and every
+  search degraded to keyword matching. Set 90s.
+- **Free-tier inference does not work for this workload.** Measured across
+  every OpenRouter free model advertising structured output: at best 1
+  successful interpretation in 4, at 37-67s each, plus a 50 request/day cap.
+  Budget for a paid model -- roughly $0.0006 per search. See
+  [performance.md](performance.md).
 
 ## Before you start: two things worth knowing
 

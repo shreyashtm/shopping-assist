@@ -72,19 +72,57 @@ waits a long time and *then* gets a keyword-quality answer, honestly marked
 `degraded_mode: true`. Two turns of a clarification round-trip, each with a
 stalled first attempt, is how a search reaches a minute or more.
 
+### Free-tier models, measured
+
+Every OpenRouter free model that advertises structured output was tested with
+the real interpretation prompt. None was usable as the sole provider:
+
+| Model | Successful interpretations | Latency |
+|---|---|---|
+| `nvidia/nemotron-3-super-120b-a12b:free` | **1 of 4** | 37-67s (one run 115s) |
+| `dots-studio/dots-3-note-preview:free` | 0 of 2 | 52s |
+| `openrouter/free` | 0 of 2 | 103s |
+| `z-ai/glm-5.2:free` | 0 of 2 | 0.5s (rate-limited) |
+
+The failures are structured-output failures -- the model returns text that does
+not conform to the JSON schema -- so they surface as `degraded_mode: true`
+after a long wait. Free tiers are also capped at 50 requests/day on an unfunded
+account, and the later measurements above are partly confounded by that cap;
+the nemotron figure was taken on a fresh quota.
+
+The paid variant of the same model (`nvidia/nemotron-3-super-120b-a12b`,
+without the `:free` suffix) costs roughly **$0.0006 per search** at ~2k input
+and ~1k output tokens. That is the cheapest way to make this reliable.
+
+**Conclusion, stated plainly:** this workload cannot run on free-tier
+inference. It is not a tuning problem.
+
+### Timeouts must clear a *real* call, not a trivial one
+
+`INTERPRET_TIMEOUT_S` defaults to 30s. On a developer machine a real
+interpretation takes 10.7-11.4s, so 30s looks generous. On throttled
+free-tier hosting the same call measured 30-50s+, so the default silently
+cut off calls that would have succeeded and every search fell to keyword
+matching. Raise it (90s) on any host with shared or throttled CPU.
+
+This is the same mistake twice: an 8s fallback deadline was also calibrated
+from a trivial 2.5s call before being removed entirely. Calibrate against the
+real workload.
+
 ### Practical configuration
 
 Put a fast, reliable model first and keep the free one as the fallback:
 
 ```
-LLM_PROVIDER=anthropic
-INTERPRET_MODEL=claude-haiku-4-5
-LLM_FALLBACK_PROVIDER=openrouter
-FALLBACK_INTERPRET_MODEL=nvidia/nemotron-3-super-120b-a12b:free
+LLM_PROVIDER=openrouter
+INTERPRET_MODEL=nvidia/nemotron-3-super-120b-a12b     # no ":free"
+INTERPRET_TIMEOUT_S=90
 ```
 
-Reversing this is what makes the app feel slow. The free tier cannot be both
-free and fast here — that is a real tradeoff, not a tuning problem.
+`claude-haiku-4-5` under `LLM_PROVIDER=anthropic` is equally valid and measured
+~11s per interpretation. Either way the model must be a **paid** one: see the
+free-tier table above. A free model as *fallback* adds ~40s of waiting before
+failing anyway, so it is worse than no fallback at all.
 
 Falling through between providers is driven by failure, not elapsed time:
 only a rejected key, exhausted credit, a rate limit or a transport error

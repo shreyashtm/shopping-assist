@@ -81,6 +81,25 @@ One side effect worth noting: removing the mis-shelved sock revealed
 honestly empty rather than falsely showing 1 item, bringing the empty-path
 count from 11 to 12 (see Catalogue Coverage above).
 
+### Transient Results Must Not Be Cached (done)
+
+Found while verifying the deployment before a demo, and it would have broken
+that demo. The flagship trek query returned 0 groups and 9 unfilled slots on
+every run. Rewording the same request returned 9 populated groups -- so the
+catalogue was never the problem. The model had produced a single plan whose
+buckets nothing could fill, and that empty answer had been **cached**, so every
+later run of the original wording was a cache hit on it. One unlucky plan
+became a permanent wrong answer for that exact query.
+
+`_cache_and_return()` already refused to cache degraded responses, on the
+grounds that a transient provider failure should not be served for half an
+hour after it cleared. A zero-group result is transient for exactly the same
+reason and was not covered. Clarify turns stay cacheable -- they legitimately
+have no groups because they are asking a question, not failing to answer one.
+
+Worth noting the general lesson: the cache made a **non-deterministic** failure
+look **deterministic**, which is what made it confusing to diagnose.
+
 ### Latency
 
 Almost all of it is the single interpretation call, and the dominant factor is
