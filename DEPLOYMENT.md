@@ -225,5 +225,5 @@ Done for the current deployment — the URLs are in [README.md](README.md) and
 | Every response is `degraded_mode: true` | No LLM key set for the selected `LLM_PROVIDER`, credit exhausted, or `INTERPRET_MODEL` is not a valid id for that provider |
 | `llm_configured: true` but searches still degrade | `INTERPRET_MODEL` names a model the provider rejects — e.g. an embedding model (`...-embedding-...`) where a chat model is required |
 | Health check itself is slow (10s+) or times out | Instance under-resourced for `torch` + `sentence-transformers`; move to ≥1 GB RAM |
-| Searches take a minute or more | A slow free-tier interpretation model. Put a fast model in `LLM_PROVIDER` and demote the free one to `LLM_FALLBACK_PROVIDER`; `FALLBACK_AFTER_S` bounds how long the primary may stall first |
+| Searches take a minute or more | A slow free-tier interpretation model. Put a fast model in `LLM_PROVIDER` and demote the free one to `LLM_FALLBACK_PROVIDER` |
 | Build fails: "could not determine how to build the app" | Root directory not set to `backend` on the platform |

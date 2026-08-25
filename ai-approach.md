@@ -100,11 +100,15 @@ request straight to keyword matching. Each hop carries its own model id: a model
 valid on Anthropic is meaningless on OpenRouter, so sharing one `INTERPRET_MODEL`
 across providers would guarantee a mismatch on the fallback path.
 
-Every hop except the last is capped at `FALLBACK_AFTER_S` (default 8s). This
-exists because of a measured failure mode: a free-tier model took 37-67s per
-interpretation and failed roughly half the time, so the whole timeout was spent
-before the provider that would actually answer was even tried. Ordering matters
--- put a fast, reliable model first and the free one behind it.
+Falling through is driven by *failure*, never by elapsed time. Every hop
+gets the full `INTERPRET_TIMEOUT_S`, and only an `LLMUnavailable` -- a
+rejected key, exhausted credit, a rate limit, a transport error, or the
+provider's own timeout expiring -- moves to the next provider. An earlier
+version also abandoned a hop after a short deadline; that aborted a healthy
+provider mid-call (a real interpretation takes ~11s, the deadline was 8s)
+and sent every search to keyword matching. Slow is not the same as broken.
+Ordering still matters -- put a fast, reliable model first and the free one
+behind it.
 
 ## Degraded Mode
 

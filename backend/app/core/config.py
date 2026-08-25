@@ -49,12 +49,6 @@ class Settings(BaseSettings):
     llm_fallback_provider: Literal["anthropic", "openrouter", "local"] | None = None
     fallback_interpret_model: str | None = None
 
-    # How long the primary may take before the fallback is tried instead. Only
-    # applies when a fallback is configured. Measured motivation: a free-tier
-    # model took 37-67s per interpretation and failed roughly half the time, so
-    # without this cap every failed search waited out the full
-    # `interpret_timeout_s` before the working provider was even attempted.
-    fallback_after_s: float = 8.0
 
     # One model call per completed search, and this is it. The user-visible
     # explanations are composed from retrieval evidence (services/explain.py)

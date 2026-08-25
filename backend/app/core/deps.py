@@ -169,7 +169,7 @@ def load_provider() -> LLMProvider | None:
         chain = [(fallback, settings.fallback_interpret_model)]
         if primary is not None:
             chain.insert(0, (primary, settings.interpret_model))
-        _provider = FallbackProvider(chain, earlier_hop_timeout_s=settings.fallback_after_s)
+        _provider = FallbackProvider(chain)
         return _provider
 
     _provider = primary

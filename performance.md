@@ -86,11 +86,11 @@ FALLBACK_INTERPRET_MODEL=nvidia/nemotron-3-super-120b-a12b:free
 Reversing this is what makes the app feel slow. The free tier cannot be both
 free and fast here — that is a real tradeoff, not a tuning problem.
 
-`FALLBACK_AFTER_S` (default 8s) bounds the damage either way: every hop except
-the last is abandoned after that long, so a stalling primary no longer burns
-the entire `INTERPRET_TIMEOUT_S` before the working provider is even tried.
-The last hop keeps the full budget — nothing follows it, so giving up early
-there would only lose answers.
+Falling through between providers is driven by failure, not elapsed time:
+only a rejected key, exhausted credit, a rate limit or a transport error
+moves to the next provider. A slow-but-working provider is left alone --
+an earlier 8s deadline aborted `claude-haiku-4-5` mid-call, since a real
+interpretation takes 10.7-11.4s, and sent every search to keyword matching.
 
 ## What is already fast, and why
 

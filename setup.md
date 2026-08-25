@@ -50,7 +50,6 @@ The frontend starts on <http://localhost:3000>.
 | `backend/.env` | `INTERPRET_MODEL` | No | Defaults to `claude-haiku-4-5`, which only works with `LLM_PROVIDER=anthropic`. Set an OpenRouter-routed model id when `LLM_PROVIDER=openrouter`, or an `ollama list` model name when `LLM_PROVIDER=local` -- there is no cross-provider default |
 | `backend/.env` | `LLM_FALLBACK_PROVIDER` | No | `anthropic`, `openrouter`, or `local` -- a second provider tried when the primary is unconfigured or a live call fails. Must differ from `LLM_PROVIDER` and needs its own key set |
 | `backend/.env` | `FALLBACK_INTERPRET_MODEL` | No | Required if `LLM_FALLBACK_PROVIDER` is set -- a model id valid for *that* provider, not `INTERPRET_MODEL`'s |
-| `backend/.env` | `FALLBACK_AFTER_S` | No | Seconds the primary may take before the fallback is tried instead (default 8). Only applies when a fallback is configured; the final hop always keeps the full `INTERPRET_TIMEOUT_S` |
 | `backend/.env` | `CORS_ORIGINS` | No | Comma-separated browser origins allowed to call the API |
 | `backend/.env` | `APIFY_TOKEN` | No | Only needed to rebuild raw catalogue data |
 | `frontend/.env.local` | `NEXT_PUBLIC_API_BASE_URL` | No | Defaults to `http://localhost:8000` |

@@ -29,3 +29,4 @@ def test_cors_origin_list_handles_multiple_origins_with_whitespace():
 def test_cors_origin_list_default_has_no_trailing_slash():
     settings = Settings(_env_file=None)
     assert all(not o.endswith("/") for o in settings.cors_origin_list)
+

@@ -23,25 +23,26 @@ class FallbackProvider:
     name = "fallback"
     is_real = True
 
-    def __init__(
-        self,
-        chain: list[tuple[LLMProvider, str]],
-        earlier_hop_timeout_s: float | None = None,
-    ):
+    def __init__(self, chain: list[tuple[LLMProvider, str]]):
         """`chain` is ordered (provider, model) pairs, first tried first.
 
-        `earlier_hop_timeout_s` caps how long every hop *except the last* may
-        take before being abandoned. Without it a slow primary burns the whole
-        request budget before the fallback gets a turn -- measured against a
-        free-tier model that took 37-67s per interpretation, so the caller
-        waited out the full timeout and only then started the call that would
-        actually succeed. The last hop keeps the full timeout: there is nothing
-        left to fall back to, so giving up early there only loses answers.
+        Falling through is driven by *failure*, never by elapsed time. Every
+        hop gets the caller's full timeout, and only an `LLMUnavailable` --
+        auth rejection, exhausted credit, rate limit, transport error, or the
+        provider's own timeout expiring -- moves to the next one.
+
+        An earlier version also abandoned a hop after a short deadline, on the
+        theory that a slow primary should not delay a working fallback. That
+        was wrong and broke a healthy deployment: a real interpretation call
+        takes 10.7-11.4s (5,600-character system prompt plus the live
+        taxonomy), so the 8s deadline aborted a provider that was about to
+        succeed, and every search fell through to keyword matching while the
+        provider was fine. Slow is not the same as broken, and only the
+        provider can report broken.
         """
         if not chain:
             raise ValueError("FallbackProvider needs at least one (provider, model) pair")
         self._chain = chain
-        self._earlier_hop_timeout_s = earlier_hop_timeout_s
 
     def structured(
         self,
@@ -58,17 +59,7 @@ class FallbackProvider:
         # hop uses its own model from `self._chain`, never the caller's value.
         del model
         errors: list[str] = []
-        last_index = len(self._chain) - 1
-        for index, (provider, provider_model) in enumerate(self._chain):
-            hop_timeout = timeout_s
-            if index < last_index and self._earlier_hop_timeout_s is not None:
-                # Never *raise* the caller's budget -- only shorten it, so a
-                # deliberately tight timeout_s is still respected.
-                hop_timeout = (
-                    self._earlier_hop_timeout_s
-                    if timeout_s is None
-                    else min(timeout_s, self._earlier_hop_timeout_s)
-                )
+        for provider, provider_model in self._chain:
             try:
                 return provider.structured(
                     system=system,
@@ -76,7 +67,7 @@ class FallbackProvider:
                     schema=schema,
                     model=provider_model,
                     max_tokens=max_tokens,
-                    timeout_s=hop_timeout,
+                    timeout_s=timeout_s,
                     effort=effort,
                 )
             except LLMUnavailable as exc:

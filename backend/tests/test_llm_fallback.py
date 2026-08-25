@@ -84,31 +84,16 @@ def test_empty_chain_is_rejected_at_construction():
         FallbackProvider([])
 
 
-def test_earlier_hops_are_capped_but_the_last_hop_keeps_the_full_budget():
-    """A slow primary must not burn the whole request budget before the
-    fallback is even attempted -- but the last hop has nothing after it, so
-    cutting it short would only lose answers."""
-    first = StubProvider("first", fails=True)
-    last = StubProvider("last", result={"ok": True})
-    chain = FallbackProvider([(first, "m1"), (last, "m2")], earlier_hop_timeout_s=8.0)
+def test_every_hop_gets_the_full_timeout():
+    """Falling through is driven by failure, never by elapsed time.
 
-    chain.structured(system="s", user="u", schema=SCHEMA, model="x", timeout_s=30.0)
-
-    assert first.called_with_timeout == 8.0
-    assert last.called_with_timeout == 30.0
-
-
-def test_cap_never_raises_a_tighter_caller_timeout():
-    first = StubProvider("first", fails=True)
-    last = StubProvider("last", result={"ok": True})
-    chain = FallbackProvider([(first, "m1"), (last, "m2")], earlier_hop_timeout_s=8.0)
-
-    chain.structured(system="s", user="u", schema=SCHEMA, model="x", timeout_s=3.0)
-
-    assert first.called_with_timeout == 3.0
-
-
-def test_without_a_cap_every_hop_gets_the_callers_timeout():
+    An earlier version cut earlier hops off at a short deadline so a slow
+    primary could not delay a working fallback. That broke a healthy
+    deployment: a real interpretation takes 10.7-11.4s, the deadline was 8s,
+    so the primary was aborted just before succeeding and every search fell
+    through to keyword matching while the provider was fine. Slow is not
+    broken, and only the provider can report broken.
+    """
     first = StubProvider("first", fails=True)
     last = StubProvider("last", result={"ok": True})
     chain = FallbackProvider([(first, "m1"), (last, "m2")])

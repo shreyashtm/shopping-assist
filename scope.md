@@ -20,11 +20,26 @@ When two buckets share the same catalogue paths, cross-bucket dedupe can thin
 one group too aggressively. A bucket should become an unfilled slot when dedupe
 empties it, rather than showing a leftover weak match.
 
-### Clarification Budgets
+### Clarification Budgets (done)
 
-The planner is not yet shown per-subcategory price ranges, so it can offer
-budget chips that are technically impossible for a thin category. The taxonomy
-already stores price ranges; the prompt should include them.
+A shopper asked for women's wedding wear, was offered a "Rs 2,000-5,000" chip,
+tapped it, and got nothing: the catalogue holds 24 women's ethnic items but the
+dearest is Rs 1,955. Retrieval was correct and the empty result honest -- the
+defect was offering a choice that could only end that way.
+
+Fixed on both sides. `format_taxonomy()` now shows each populated path's real
+price range next to its count ("Lehengas(8, Rs1245-1955)"), so the planner is
+no longer inventing ranges blind, and the prompt requires options to be checked
+against the paths actually planned. Because a prompt cannot *guarantee* this --
+the model is asked several questions at once and cannot reason about the
+cross-product, and its output is not deterministic --
+`drop_unsatisfiable_budget_options()` enforces the same rule in code. It runs
+in `recommend.py` after `apply_context_audit`, where model-generated questions
+and the deterministic ones `context_slots.py` appends both converge; the
+reported chip came from the latter, so a guard on model output alone would have
+missed it. Satisfiability is measured against the *required* buckets only:
+checking all of them let "Rs 3,000+" pass on the strength of a Rs 9,684 potli
+clutch in an accessories bucket while the outfit itself topped out at Rs 1,955.
 
 ### Non-Deterministic Ask/Do-Not-Ask
 
@@ -88,10 +103,11 @@ Two consequences the deployment has to live with:
   response is honestly marked `degraded_mode: true` -- but the user waited a
   long time for a weaker answer.
 - **A slow primary used to burn the whole budget before the fallback ran.**
-  `FallbackProvider` now caps every hop except the last at `fallback_after_s`
-  (default 8s), so a stalling primary is abandoned early and the working
-  provider is reached sooner. The last hop keeps the full `interpret_timeout_s`
-  -- there is nothing after it, so cutting it short would only lose answers.
+  `FallbackProvider` falls through on *failure* only -- a rejected key,
+  exhausted credit, a rate limit, a transport error, or the provider's own
+  timeout expiring. It deliberately does not abandon a hop for being slow:
+  an earlier version did, with an 8s deadline, and aborted a healthy
+  provider mid-call because a real interpretation takes ~11s.
 
 For a responsive deployment, put a fast reliable model first and keep the free
 model as the fallback, not the other way round.
@@ -120,11 +136,6 @@ Potential improvements:
 Add missing formalwear, footwear, women's outerwear, gifting and accessory
 categories. Improve validation so mis-shelved records are caught before build
 output is committed.
-
-### Use Price Ranges in Planning
-
-Pass taxonomy price ranges into the interpreter so generated clarification
-options are always satisfiable by the current catalogue.
 
 ### Personalisation
 
