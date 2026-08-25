@@ -65,6 +65,14 @@ class ClimateContext(BaseModel):
         description="Rendered from the numbers for display. Derived, not authoritative.",
     )
 
+    unobtainable_reason: Literal["no dates", "lookup failed"] | None = Field(
+        default=None,
+        description="Why conditions are unavailable, when source is 'unobtainable'. "
+        "A request that named no date never had a lookup attempted, which is a "
+        "different thing to tell the shopper than one that was attempted and "
+        "failed -- and only the second is a fault.",
+    )
+
     place_resolved: str | None = Field(
         default=None,
         description="What we actually looked up, which may differ from what the "

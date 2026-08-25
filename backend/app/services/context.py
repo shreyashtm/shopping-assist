@@ -174,6 +174,15 @@ def render_summary(climate: ClimateContext) -> str:
         where = f"{place} ({climate.elevation_m:,.0f} m)"
 
     if climate.source == "unobtainable":
+        # The cause matters to the reader. "Could not be verified" implies a
+        # lookup was attempted and failed; when the request simply carried no
+        # date, nothing was attempted at all, and saying otherwise reads as a
+        # broken app rather than as the system declining to guess.
+        if climate.unobtainable_reason == "no dates":
+            return (
+                f"Add a date for {place} and conditions can be checked -- "
+                f"the same place needs different clothing in different seasons."
+            )
         return f"Conditions for {place} could not be verified."
 
     if not climate.has_numbers:
@@ -197,8 +206,18 @@ def render_summary(climate: ClimateContext) -> str:
 
 
 def unobtainable(context: ResolvedContext, reason: str) -> ClimateContext:
+    """Report that conditions are unavailable, and why.
+
+    `reason` used to be logged and discarded, so every cause produced the same
+    sentence. A request with no date and a genuinely failed lookup are very
+    different things to tell a shopper about, and only one of them is a fault.
+    """
     logger.info("Climate unobtainable for %r: %s", context.location, reason)
-    climate = ClimateContext(source="unobtainable", place_resolved=context.location)
+    climate = ClimateContext(
+        source="unobtainable",
+        place_resolved=context.location,
+        unobtainable_reason="no dates" if "no dates" in reason else "lookup failed",
+    )
     return climate.model_copy(update={"summary": render_summary(climate)})
 
 

@@ -150,3 +150,48 @@ def test_resolve_climate_none_without_place():
         assert resolve_climate(ResolvedContext(), client, date.today()) is None
     finally:
         client.close()
+
+
+# --- "Could not verify" must say *why* -------------------------------------
+#
+# Real report: "suggest dress for my trip to goa" returned "Conditions for Goa
+# could not be verified." Nothing had been attempted -- the request carried no
+# date, so trip_window() returned None and resolve_climate() bailed before any
+# lookup. The message implied a failed lookup and read as a broken app, when
+# the truth was that the same beach is monsoon in August and peak season in
+# December and the system was refusing to guess.
+#
+# The cause was already computed and passed to unobtainable() as `reason`, then
+# logged and thrown away. These pin it into the user-visible sentence.
+
+
+def test_missing_dates_says_so_rather_than_implying_a_failed_lookup():
+    from app.services.context import unobtainable
+
+    climate = unobtainable(ResolvedContext(location="Goa"), "no dates in the request")
+
+    assert "Goa" in climate.summary
+    assert "could not be verified" not in climate.summary
+    assert "date" in climate.summary.lower()
+
+
+def test_a_genuine_lookup_failure_still_reads_as_a_failure():
+    from app.services.context import unobtainable
+
+    climate = unobtainable(
+        ResolvedContext(location="Hampta Pass"), "could not establish coordinates"
+    )
+
+    assert "Hampta Pass" in climate.summary
+    assert "could not" in climate.summary.lower()
+
+
+def test_unobtainable_never_invents_numbers():
+    """Whatever the wording, the contract holds: no fabricated temperatures."""
+    from app.services.context import unobtainable
+
+    climate = unobtainable(ResolvedContext(location="Goa"), "no dates in the request")
+
+    assert climate.source == "unobtainable"
+    assert climate.temp_min_c is None
+    assert climate.temp_max_c is None
