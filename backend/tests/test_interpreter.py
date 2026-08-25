@@ -79,3 +79,153 @@ def test_interpret_leaves_gender_unset_when_the_model_did_not_set_it():
     structured = interpret(provider, "any-model", "a jacket", date(2026, 8, 25))
 
     assert structured.filters.gender is None
+
+
+# --- Budget chips must be satisfiable by the catalogue ---------------------
+#
+# Real defect: a shopper asked for women's wedding wear, was offered a
+# "Rs 2,000-5,000" budget chip, tapped it, and got zero products. The
+# catalogue does hold 24 women's ethnic items -- but the most expensive is
+# Rs 1,955, so the price filter excluded every one of them. The planner had
+# invented a plausible-sounding range it had no way to check, because the
+# prompt only ever showed it product *counts*. taxonomy.json already stores a
+# price_range per subcategory; it just was not being passed through.
+
+
+def _taxonomy_with_prices() -> dict:
+    return {
+        "categories": {
+            "Ethnic Wear": {
+                "Lehengas": {"count": 8, "price_range": [429, 1955], "viable": True},
+                "Sarees": {"count": 8, "price_range": [500, 1431], "viable": True},
+            },
+            "Footwear": {
+                "Heels": {"count": 0, "price_range": None, "viable": False},
+            },
+        }
+    }
+
+
+def test_taxonomy_prompt_includes_price_ranges():
+    from app.services.interpreter import format_taxonomy
+
+    rendered = format_taxonomy(_taxonomy_with_prices())
+
+    assert "429" in rendered and "1955" in rendered, (
+        f"price range missing from planner prompt:\n{rendered}"
+    )
+
+
+def test_taxonomy_prompt_still_shows_counts():
+    from app.services.interpreter import format_taxonomy
+
+    rendered = format_taxonomy(_taxonomy_with_prices())
+
+    assert "Lehengas" in rendered
+    assert "8" in rendered
+
+
+def test_empty_paths_render_without_a_price_range():
+    """A zero-count path has no price range to show, and must not crash or
+    invent one -- it still has to appear so the model can report the gap."""
+    from app.services.interpreter import format_taxonomy
+
+    rendered = format_taxonomy(_taxonomy_with_prices())
+
+    assert "Heels" in rendered
+    heels_line = next(line for line in rendered.splitlines() if "Heels" in line)
+    assert "None" not in heels_line
+
+
+# --- Deterministic guard: drop budget chips the catalogue cannot satisfy ----
+#
+# The prompt now shows the planner each path's real price range, which
+# materially improved the options it generates -- but a prompt cannot
+# *guarantee* satisfiability. Two reasons it still slips: the model is asked
+# several questions at once and cannot reason about the cross-product (women +
+# Rs2,000-5,000 is empty even though each option is individually fine), and
+# model output is not deterministic. So the same rule is enforced in code,
+# matching the project's split: the model proposes, deterministic code checks.
+
+
+def _price_taxonomy() -> dict:
+    """Sarees and lehengas: nothing above Rs 1,955."""
+    return {
+        "categories": {
+            "Ethnic Wear": {
+                "Lehengas": {"count": 8, "price_range": [1245, 1955], "viable": True},
+                "Sarees": {"count": 8, "price_range": [429, 1431], "viable": True},
+            }
+        }
+    }
+
+
+def test_unsatisfiable_budget_option_is_dropped():
+    from app.services.interpreter import drop_unsatisfiable_budget_options
+
+    question = {
+        "slot": "budget",
+        "question": "What is your budget?",
+        "options": [
+            {"label": "Under Rs 1,500", "value": "price_max:1500"},
+            {"label": "Rs 1,500 - 3,000", "value": "price_min:1500,price_max:3000"},
+            {"label": "Rs 3,000 and above", "value": "price_min:3000"},
+        ],
+    }
+
+    kept = drop_unsatisfiable_budget_options(
+        [question], ["Ethnic Wear/Lehengas", "Ethnic Wear/Sarees"], _price_taxonomy()
+    )
+
+    values = [o["value"] for o in kept[0]["options"]]
+    assert "price_min:3000" not in values, "kept a chip no product can satisfy"
+    assert "price_max:1500" in values
+    assert "price_min:1500,price_max:3000" in values
+
+
+def test_budget_question_is_dropped_entirely_when_no_option_survives():
+    """Better to assume than to ask a question whose every answer is empty."""
+    from app.services.interpreter import drop_unsatisfiable_budget_options
+
+    question = {
+        "slot": "budget",
+        "question": "What is your budget?",
+        "options": [
+            {"label": "Rs 5,000+", "value": "price_min:5000"},
+            {"label": "Rs 10,000+", "value": "price_min:10000"},
+        ],
+    }
+
+    kept = drop_unsatisfiable_budget_options(
+        [question], ["Ethnic Wear/Sarees"], _price_taxonomy()
+    )
+
+    assert kept == []
+
+
+def test_non_budget_questions_are_never_touched():
+    from app.services.interpreter import drop_unsatisfiable_budget_options
+
+    question = {
+        "slot": "occasion",
+        "question": "What is the occasion?",
+        "options": [{"label": "Wedding", "value": "occasion:wedding"}],
+    }
+
+    kept = drop_unsatisfiable_budget_options([question], ["Ethnic Wear/Sarees"], _price_taxonomy())
+
+    assert kept == [question]
+
+
+def test_no_paths_or_no_taxonomy_leaves_questions_alone():
+    """With nothing to check against, dropping options would be guessing."""
+    from app.services.interpreter import drop_unsatisfiable_budget_options
+
+    question = {
+        "slot": "budget",
+        "question": "Budget?",
+        "options": [{"label": "Rs 9,000+", "value": "price_min:9000"}],
+    }
+
+    assert drop_unsatisfiable_budget_options([question], [], _price_taxonomy()) == [question]
+    assert drop_unsatisfiable_budget_options([question], ["Ethnic Wear/Sarees"], {}) == [question]

@@ -252,6 +252,16 @@ system can merge directly:
   gender:  "gender:men", "gender:women", "gender:unisex"
   other:   "occasion:office", "use_case:trekking", "category:Footwear"
 
+BUDGET OPTIONS MUST BE SATISFIABLE. The taxonomy gives you each path's real
+price range. Before offering a budget option, check it against the ranges of
+the paths you actually put in `catalogue_paths` -- every option must contain
+at least some real products, and the highest option must not start above the
+most expensive product available. Offering a range the catalogue cannot fill
+sends the shopper to an empty result they chose themselves, which is worse
+than not asking about budget at all. If a category's whole range is narrow,
+ask fewer, wider budget options, or skip the budget question entirely and
+assume instead.
+
 Never ask about something the user already told you. Never ask more than 4.
 Even when asking, still fill in `buckets` for your best current guess -- the
 user may skip the questions.
@@ -271,14 +281,118 @@ def format_taxonomy(taxonomy: dict) -> str:
     Zero-count paths are shown rather than hidden: seeing that
     `Footwear/Formal Shoes` exists as a concept but holds 0 products is what
     lets the model report a gap instead of inventing a substitute.
+
+    Each populated path also carries its real price range, because counts
+    alone are not enough to generate a *satisfiable* budget question. A
+    shopper asking for women's wedding wear was offered a "Rs 2,000-5,000"
+    chip and got nothing back: the catalogue holds 24 women's ethnic items,
+    but the most expensive is Rs 1,955, so the price filter excluded all of
+    them. The model could not have known -- it was shown counts and no prices.
     """
     lines = []
     for category, subs in taxonomy.get("categories", {}).items():
-        parts = [
-            f"{sub}({entry['count']})" for sub, entry in subs.items()
-        ]
+        parts = []
+        for sub, entry in subs.items():
+            price_range = entry.get("price_range")
+            if entry["count"] and price_range:
+                low, high = price_range
+                parts.append(f"{sub}({entry['count']}, Rs{low}-{high})")
+            else:
+                parts.append(f"{sub}({entry['count']})")
         lines.append(f"  {category}: {', '.join(parts)}")
     return "\n".join(lines)
+
+
+def _price_bounds(paths: list[str], taxonomy: dict) -> tuple[int, int] | None:
+    """Cheapest and dearest real product across `paths`, or None if unknown."""
+    lows: list[int] = []
+    highs: list[int] = []
+    categories = taxonomy.get("categories", {})
+    for path in paths:
+        category, _, sub = path.partition("/")
+        entry = categories.get(category, {}).get(sub)
+        if not entry or not entry.get("count") or not entry.get("price_range"):
+            continue
+        low, high = entry["price_range"]
+        lows.append(low)
+        highs.append(high)
+    return (min(lows), max(highs)) if lows else None
+
+
+def _option_is_satisfiable(value: str, low: int, high: int) -> bool:
+    """True when the option's price window overlaps real stock.
+
+    Values look like "price_max:1500" or "price_min:1500,price_max:3000".
+    Anything unparseable is treated as satisfiable -- refusing to show an
+    option we merely failed to read would be worse than showing one.
+    """
+    want_min, want_max = 0, float("inf")
+    for part in value.split(","):
+        key, _, raw = part.partition(":")
+        if not raw.isdigit():
+            continue
+        if key.strip() == "price_min":
+            want_min = int(raw)
+        elif key.strip() == "price_max":
+            want_max = int(raw)
+    return want_min <= high and want_max >= low
+
+
+def drop_unsatisfiable_budget_options(
+    questions: list[dict], paths: list[str], taxonomy: dict | None
+) -> list[dict]:
+    """Remove budget chips no product in `paths` can satisfy.
+
+    A shopper tapped a "Rs 2,000-5,000" chip for women's wedding wear and got
+    an empty result: the catalogue holds 24 women's ethnic items, but the
+    dearest is Rs 1,955. Showing the planner real price ranges made its
+    options much better, but cannot guarantee them -- it is asked several
+    questions at once and cannot reason about the cross-product (women +
+    Rs 2,000-5,000 is empty even when each half is fine), and its output is
+    not deterministic. So the same rule is enforced here.
+
+    A budget question whose every option is unsatisfiable is dropped whole:
+    asking a question where each answer leads to nothing is worse than
+    assuming. Non-budget questions are never touched, and with no paths or no
+    taxonomy nothing is dropped -- there would be nothing to check against.
+    """
+    if not paths or not taxonomy:
+        return questions
+
+    bounds = _price_bounds(paths, taxonomy)
+    if bounds is None:
+        return questions
+    low, high = bounds
+
+    kept: list[dict] = []
+    for question in questions:
+        if question.get("slot") != "budget":
+            kept.append(question)
+            continue
+
+        options = [
+            option
+            for option in question.get("options", [])
+            if _option_is_satisfiable(option.get("value", ""), low, high)
+        ]
+        if not options:
+            logger.info(
+                "Dropped budget question entirely: no option fits the Rs%d-%d "
+                "range actually available in %s",
+                low,
+                high,
+                paths,
+            )
+            continue
+        if len(options) != len(question.get("options", [])):
+            logger.info(
+                "Dropped %d unsatisfiable budget option(s) against Rs%d-%d",
+                len(question.get("options", [])) - len(options),
+                low,
+                high,
+            )
+        kept.append({**question, "options": options})
+    return kept
 
 
 def build_user_prompt(

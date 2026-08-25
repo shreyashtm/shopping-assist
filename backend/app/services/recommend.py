@@ -28,7 +28,7 @@ from app.adapters.weather.open_meteo import OpenMeteoClient
 from app.core.cache import cache_key, response_cache
 from app.core.config import get_settings
 from app.core.deps import get_taxonomy
-from app.schemas.query import QueryFilters, StructuredQuery
+from app.schemas.query import ClarifyingQuestion, QueryFilters, StructuredQuery
 from app.schemas.recommend import (
     Recommendation,
     RecommendationGroup,
@@ -38,6 +38,7 @@ from app.schemas.recommend import (
     UnfilledSlot,
 )
 from app.services.catalogue import Catalogue
+from app.services.constraints import derive_constraints
 from app.services.context import (
     apply_climate_from_answers,
     build_climate_question,
@@ -45,10 +46,14 @@ from app.services.context import (
     needs_place_climate,
     resolve_climate,
 )
-from app.services.constraints import derive_constraints
 from app.services.context_slots import apply_context_audit, is_specific_trip
 from app.services.explain import explain_pick
-from app.services.interpreter import interpret, merge_answers, offline_interpret
+from app.services.interpreter import (
+    drop_unsatisfiable_budget_options,
+    interpret,
+    merge_answers,
+    offline_interpret,
+)
 from app.services.retrieval import (
     ScoredProduct,
     dedupe_across_buckets,
@@ -329,6 +334,35 @@ def recommend_events(
     notes.extend(climate_notes)
 
     structured, context_variables = apply_context_audit(structured, payload.answers, today)
+
+    # Budget chips are checked against real catalogue prices here rather than
+    # inside interpret(), because this is where the two sources of questions
+    # converge: model-generated ones and the deterministic fallbacks
+    # context_slots.py appends for unfilled gaps. The reported defect came from
+    # the latter -- a hardcoded "Premium (Rs3,000+)" chip offered against
+    # women's ethnic wear, where the dearest product is Rs 1,955 -- so a guard
+    # that only inspected model output would have missed it entirely.
+    if structured.questions:
+        # Checked against the *required* buckets only. Using every bucket's
+        # paths made the guard too lenient: for "traditional wear" the model
+        # also plans an accessories bucket holding a Rs 9,684 potli clutch, so
+        # a "Rs 3,000+" chip looked satisfiable against that union while the
+        # outfit itself -- the thing actually being asked for -- topped out at
+        # Rs 1,955. Tapping it still returned zero groups. A budget the
+        # required need cannot meet is not a budget worth offering.
+        required = [b for b in structured.buckets if b.role == "required"]
+        proposed_paths = [
+            path for bucket in (required or structured.buckets) for path in bucket.catalogue_paths
+        ]
+        surviving = drop_unsatisfiable_budget_options(
+            [q.model_dump() for q in structured.questions], proposed_paths, get_taxonomy()
+        )
+        structured = structured.model_copy(
+            update={
+                "questions": [ClarifyingQuestion.model_validate(q) for q in surviving],
+                "needs_clarification": bool(surviving) and structured.needs_clarification,
+            }
+        )
 
     def elapsed() -> int:
         return int((time.perf_counter() - started) * 1000)
