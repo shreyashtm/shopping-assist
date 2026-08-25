@@ -168,9 +168,11 @@ actually demands, using real-world knowledge:
 
 Put terrain and activity reasoning in `why_needed`. Do NOT state temperatures in
 `climate_note` -- a later stage looks up real weather. For any named place
-(mountain pass, trail, city), set `location_lat`, `location_lon`, and
-`elevation_estimate_m` from your geographic knowledge. Leave them null only when
-the request names no place at all.
+(mountain pass, trail, city), set `location`, `location_lat`, `location_lon`,
+and `elevation_estimate_m` from your geographic knowledge. Leave ALL FOUR
+null when the request names no place at all -- do not invent a placeholder
+country or region ("India - unspecified city") to fill the field. A generic
+"Indian shopping assistant" framing is not a location the user gave you.
 
 ## Buckets
 
@@ -213,6 +215,26 @@ This is the most important judgement you make:
   option, add it as a SEPARATE optional slot with its own honest name -- for an
   Indian wedding with no suits in stock, an "Indian formal alternative" slot
   pointing at Ethnic Wear/Sherwanis is helpful. Do not disguise it as the suit.
+
+## Who this is for
+
+Set `recipient` ONLY when the shopper is buying an item to give to someone
+else. A third party mentioned as part of an occasion is not automatically a
+recipient:
+
+- "traditional wear for my friend's wedding" -> the shopper is ATTENDING,
+  buying for themselves. `recipient` stays null. The wedding is the occasion,
+  not evidence of a gift.
+- "a gift for my friend's wedding" / "my friend's wedding gift" -> explicit
+  gifting language. `recipient` = "friend".
+- "something for my mom's anniversary" -> ambiguous the same way as the
+  wedding case; default to null unless the phrasing says "gift", "present",
+  or names the recipient as who the item is *for* rather than whose event
+  it is.
+
+When in doubt, leave `recipient` null. A wrongly-assumed gift search asks
+the wrong questions (whose taste, not the shopper's) and can misdirect the
+whole plan.
 
 ## Asking questions
 
