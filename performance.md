@@ -114,15 +114,18 @@ real workload.
 Put a fast, reliable model first and keep the free one as the fallback:
 
 ```
-LLM_PROVIDER=openrouter
-INTERPRET_MODEL=nvidia/nemotron-3-super-120b-a12b     # no ":free"
+LLM_PROVIDER=anthropic
+INTERPRET_MODEL=claude-haiku-4-5
 INTERPRET_TIMEOUT_S=90
 ```
 
-`claude-haiku-4-5` under `LLM_PROVIDER=anthropic` is equally valid and measured
-~11s per interpretation. Either way the model must be a **paid** one: see the
-free-tier table above. A free model as *fallback* adds ~40s of waiting before
-failing anyway, so it is worse than no fallback at all.
+Measured at 10.7-11.4s per interpretation and reliable across every run.
+`nvidia/nemotron-3-super-120b-a12b` on OpenRouter (without the `:free` suffix)
+is the cheaper alternative at roughly $0.0006 per search.
+
+Either way the model must be a **paid** one -- see the free-tier table above.
+A free model as *fallback* is worse than no fallback at all: it adds ~40s of
+waiting and then fails anyway.
 
 Falling through between providers is driven by failure, not elapsed time:
 only a rejected key, exhausted credit, a rate limit or a transport error
