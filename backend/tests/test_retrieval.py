@@ -166,6 +166,58 @@ def test_wedding_bucket_rejects_explicitly_non_wedding_occasion():
     assert passes_occasion_context(festive, bucket)
 
 
+def test_anniversary_bucket_rejects_a_birthday_tagged_product():
+    """Live capture: a "Genshin Merch Box" (occasion=[birthday, festive])
+    surfaced as a top pick for a parents' 25th anniversary hamper. The
+    wedding-only check above never covered anniversary at all."""
+    bucket = Bucket(
+        name="Anniversary Gift",
+        search_phrases=["premium gift hamper"],
+        why_needed="A 25th anniversary gift for your parents.",
+        catalogue_paths=["Gifting/Keepsakes"],
+    )
+    genshin_merch = make_product(
+        "genshin", category="Gifting", subcategory="Keepsakes",
+        attributes={"occasion": ["birthday", "festive"]},
+    )
+    assert not passes_occasion_context(genshin_merch, bucket)
+
+
+def test_anniversary_bucket_accepts_a_matching_or_untagged_product():
+    bucket = Bucket(
+        name="Anniversary Gift",
+        search_phrases=["premium gift hamper"],
+        why_needed="A 25th anniversary gift for your parents.",
+        catalogue_paths=["Gifting/Keepsakes"],
+    )
+    tagged = make_product(
+        "matching", category="Gifting", subcategory="Keepsakes",
+        attributes={"occasion": ["anniversary"]},
+    )
+    untagged = make_product("plain", category="Gifting", subcategory="Keepsakes")
+    assert passes_occasion_context(tagged, bucket)
+    assert passes_occasion_context(untagged, bucket), (
+        "missing evidence must not be treated as a conflict"
+    )
+
+
+def test_generic_gifting_bucket_is_not_gated_by_occasion():
+    """Only the curated, specific occasions gate at all -- a bucket that
+    doesn't name one of them (an ordinary gift bucket with no stated
+    occasion) must not reject products over occasion mismatches."""
+    bucket = Bucket(
+        name="Gift Ideas",
+        search_phrases=["gift set"],
+        why_needed="A nice gift.",
+        catalogue_paths=["Gifting/Keepsakes"],
+    )
+    birthday_only = make_product(
+        "b", category="Gifting", subcategory="Keepsakes",
+        attributes={"occasion": ["birthday"]},
+    )
+    assert passes_occasion_context(birthday_only, bucket)
+
+
 # --- temperature reasoning ------------------------------------------------
 
 def test_warmer_jacket_wins_for_sub_zero_conditions():

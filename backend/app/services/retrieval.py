@@ -263,28 +263,49 @@ def passes_filters(product: Product, filters: QueryFilters) -> bool:
     return True
 
 
+# Occasions specific enough that a mismatch is a real content problem, not
+# a missed nice-to-have -- deliberately excludes broader, less exclusive
+# contexts (office, party, travel, everyday) where requiring an exact tag
+# match would reject perfectly good products that simply weren't tagged
+# that precisely. A live capture is the reason this list exists at all: a
+# "Genshin Merch Box" (occasion=[birthday, festive]) surfaced as a top pick
+# for a parents' 25th anniversary hamper, because nothing outside the
+# wedding-specific check below verified occasion compatibility for anything
+# but weddings.
+_GATED_OCCASIONS = {"wedding", "anniversary", "birthday", "festive", "interview"}
+
+
 def passes_occasion_context(product: Product, bucket: Bucket) -> bool:
     """Reject explicit occasion conflicts for occasion-specific buckets.
 
     Product type gating alone is insufficient for a sparse archive catalogue:
     a Halloween/cosplay accessory can be a semantic match for wedding
-    accessories. When enrichment explicitly records occasions, require a
-    compatible wedding occasion; products with no occasion metadata remain
-    eligible because missing evidence is not evidence of a conflict.
+    accessories, and a birthday-themed gift box can be a semantic match for
+    an anniversary hamper. When enrichment explicitly records occasions,
+    require a compatible one; products with no occasion metadata remain
+    eligible either way, because missing evidence is not evidence of a
+    conflict.
     """
     bucket_text = " ".join(
         [bucket.name, bucket.why_needed, *bucket.search_phrases]
     ).lower()
-    if "wedding" not in bucket_text:
-        return True
+    product_occasions = {occasion.lower() for occasion in product.attributes.occasion}
 
-    product_path = f"{product.category}/{product.subcategory}"
-    asks_for_accessories = "accessor" in bucket_text or "jewellery" in bucket_text
-    if asks_for_accessories and product_path == "Gifting/Keepsakes":
+    if "wedding" in bucket_text:
+        product_path = f"{product.category}/{product.subcategory}"
+        asks_for_accessories = "accessor" in bucket_text or "jewellery" in bucket_text
+        if asks_for_accessories and product_path == "Gifting/Keepsakes":
+            return False
+        # "festive" is treated as wedding-compatible here specifically --
+        # Indian wedding season overlaps heavily with festive-occasion
+        # tagging -- which is why this stays its own branch rather than
+        # folding into the general check below.
+        return not product_occasions or bool(product_occasions & {"wedding", "festive"})
+
+    named = {occasion for occasion in _GATED_OCCASIONS if occasion in bucket_text}
+    if named and product_occasions and not (product_occasions & named):
         return False
-
-    occasions = {occasion.lower() for occasion in product.attributes.occasion}
-    return not occasions or bool(occasions & {"wedding", "festive"})
+    return True
 
 
 def temperature_fit(product: Product, context: ResolvedContext) -> tuple[float, str | None]:
