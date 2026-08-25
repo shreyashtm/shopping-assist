@@ -38,7 +38,20 @@ Frontend checks:
 cd frontend
 npm run build
 npm run lint
+npm run test:run
 ```
 
-There is not yet a Playwright or component-test suite. That is listed as future
-scope in [scope.md](scope.md).
+Unit and component tests run on Vitest + React Testing Library (`vitest.config.mts`),
+44 tests across:
+
+| File | Covers |
+|---|---|
+| `lib/thread.test.ts` | follow-up composition length budgeting, established-context formatting, chip-answer labels |
+| `components/ProductCard.test.tsx` | price/discount formatting, brand fallback, `link_status` provenance badges |
+| `components/QueryBar.test.tsx` | Enter-to-send vs Shift+Enter, minimum-length gate, busy state, example queries |
+| `components/ResultsView.test.tsx` | grouped results, unfilled-slot reporting, degraded-mode notice, empty-catalogue state |
+
+`npm run test` runs Vitest in watch mode for local development.
+
+There is not yet a Playwright/E2E suite covering the full clarify round-trip
+against a live backend. That remains future scope in [scope.md](scope.md).

@@ -90,7 +90,14 @@ export function composeFollowUp(
   if (withoutContext.length <= MAX_QUERY_CHARS) return withoutContext;
 
   const room = MAX_QUERY_CHARS - build("", "").length;
-  return build(earlier.slice(0, Math.max(0, room)), "");
+  if (room >= 0) return build(earlier.slice(0, room), "");
+
+  // Even the bare "Earlier request: \nFollow-up: ..." skeleton with no
+  // earlier text at all is still over the cap -- the fixed label text plus
+  // a near-cap-length follow-up can do this alone. There is nothing left to
+  // shed but the follow-up itself, which the schema's max_length leaves no
+  // choice about.
+  return followUp.slice(0, MAX_QUERY_CHARS);
 }
 
 /** Labels for the chips a shopper tapped, for echoing back into the thread. */

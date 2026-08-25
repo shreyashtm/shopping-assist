@@ -99,15 +99,19 @@ Create a fixed benchmark of shopping requests with expected buckets, product
 types and unacceptable substitutions. This would make prompt, ranking and
 catalogue changes measurable.
 
-### Frontend Test Coverage
+### Frontend Test Coverage (unit/component done; E2E still open)
 
-Add browser-level tests for:
+Vitest + React Testing Library now cover degraded-mode banner, unfilled-slot
+display, product links, and follow-up composition (44 tests, see
+[testing.md](testing.md)) -- this caught a real bug in `composeFollowUp`
+along the way: a near-cap-length follow-up could exceed the schema's
+`max_length` because the fixed label overhead wasn't accounted for in the
+final truncation fallback.
 
-- clarification flow
-- degraded-mode banner
-- unfilled-slot display
-- product links
-- follow-up composition
+Still open: browser-level (Playwright) tests for the full clarification
+round-trip against a live backend -- the component tests exercise
+`ClarifyPanel`/`ResultsView` with fixture data, not the actual multi-turn
+fetch/answer/re-render cycle.
 
 ## Remaining Planned Work (as of 2026-08-25)
 
