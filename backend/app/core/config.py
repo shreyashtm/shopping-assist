@@ -32,12 +32,14 @@ class Settings(BaseSettings):
     # recommend.py) is unaware which one is behind `LLMProvider` and does not
     # change either way. Anthropic remains the default because
     # `interpret_model`'s default ("claude-haiku-4-5") is an Anthropic model
-    # id -- switching to "openrouter" should come with an OpenRouter-style
-    # model id in `interpret_model` too (e.g. "anthropic/claude-haiku-4.5" or
-    # any other OpenRouter-routed model).
-    llm_provider: Literal["anthropic", "openrouter"] = "anthropic"
+    # id -- switching to "openrouter" or "local" should come with a matching
+    # model id in `interpret_model` too (an OpenRouter-routed id, or a model
+    # name from `ollama list`).
+    llm_provider: Literal["anthropic", "openrouter", "local"] = "anthropic"
     anthropic_api_key: str | None = None
     openrouter_api_key: str | None = None
+    # Ollama's OpenAI-compatible endpoint. No key needed -- it's local.
+    local_llm_base_url: str = "http://localhost:11434/v1/chat/completions"
 
     # One model call per completed search, and this is it. The user-visible
     # explanations are composed from retrieval evidence (services/explain.py)

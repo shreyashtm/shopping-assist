@@ -36,6 +36,8 @@ _GENDER_ALIASES = {
     "women": "women",
     "unisex": "unisex",
     "anyone": "unisex",
+    "neutral": "unisex",
+    "any": "unisex",
     "kids": "kids",
     "children": "kids",
 }
@@ -299,6 +301,17 @@ def interpret(
         effort=effort,
     )
     structured = StructuredQuery.model_validate(payload)
+
+    # The model can emit a natural-language gender word ("neutral") that
+    # ProductAttributes.gender's canonical enum does not recognize -- fuzzing
+    # against a local model turned up "neutral" directly, and merge_answers()
+    # already normalizes the same class of value from chip answers. Apply the
+    # same alias table here so the interpreter's own direct output gets the
+    # same protection, not just tapped answers.
+    if structured.filters.gender:
+        structured.filters.gender = _GENDER_ALIASES.get(
+            structured.filters.gender.lower(), structured.filters.gender
+        )
 
     # Answers already supplied settle the matter; a model that asks again would
     # trap the user in a loop.

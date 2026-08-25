@@ -18,6 +18,7 @@ from app.services.retrieval import (
     implied_seasons,
     passes_occasion_context,
     passes_filters,
+    sanitize_categories,
     score_product,
     search_bucket,
     temperature_fit,
@@ -68,6 +69,55 @@ def test_gender_filter_keeps_unisex():
     assert passes_filters(womens, filters)
     assert passes_filters(unisex, filters), "unisex must not be filtered out by a gender request"
     assert not passes_filters(make_product("m", attributes={"gender": "men"}), filters)
+
+
+def test_requested_unisex_means_no_preference_between_men_and_women():
+    """Fuzzed against a local model: filters.gender="unisex" collapsed a
+    77-product category to the 3 products literally tagged unisex, emptying
+    a bucket whose catalogue_paths were otherwise entirely correct. The
+    GENDER_QUESTION chip is labelled "Anyone / unisex" -- requesting unisex
+    means no preference between men's and women's, not "only the literally
+    unisex-tagged slice"."""
+    filters = QueryFilters(gender="unisex")
+    assert passes_filters(make_product("m", attributes={"gender": "men"}), filters)
+    assert passes_filters(make_product("w", attributes={"gender": "women"}), filters)
+    assert passes_filters(make_product("u", attributes={"gender": "unisex"}), filters)
+
+
+def test_requested_unisex_still_excludes_kids():
+    """Kids is a distinct, deliberate category (age-appropriateness, not
+    cut) -- expressing no preference between men's and women's is not a
+    request for children's items too."""
+    filters = QueryFilters(gender="unisex")
+    assert not passes_filters(make_product("k", attributes={"gender": "kids"}), filters)
+
+
+def test_sanitize_categories_drops_unrecognized_noise():
+    """Fuzzed against a local model: nothing in the schema tells the model
+    what filters.categories should contain, and a weak model filled it with
+    plain topic words ('trekking', 'outdoor') instead of real taxonomy
+    entries. Matched literally that zeroes every candidate in every bucket --
+    the exact failure this exists to prevent."""
+    filters = QueryFilters(categories=["trekking", "outdoor"])
+    sanitized = sanitize_categories(filters)
+    assert sanitized.categories == [], "fully-noisy input must leave no category constraint"
+
+
+def test_sanitize_categories_keeps_recognized_values_and_drops_only_noise():
+    filters = QueryFilters(categories=["Men's Apparel", "not-a-real-category"])
+    sanitized = sanitize_categories(filters)
+    assert sanitized.categories == ["Men's Apparel"]
+
+
+def test_sanitize_categories_is_a_no_op_when_everything_is_recognized():
+    filters = QueryFilters(categories=["Men's Apparel", "Footwear/Boots"])
+    sanitized = sanitize_categories(filters)
+    assert sanitized.categories == ["Men's Apparel", "Footwear/Boots"]
+
+
+def test_sanitize_categories_leaves_an_empty_list_alone():
+    filters = QueryFilters()
+    assert sanitize_categories(filters) is filters
 
 
 def test_category_filter_accepts_bare_category_name():
@@ -202,6 +252,57 @@ def test_search_bucket_respects_filters_and_limit():
     )
     assert len(results) == 2
     assert all(r.product.price_inr <= 4000 for r in results)
+
+
+def test_global_category_filter_does_not_zero_out_a_bucket_it_never_described():
+    """Reproduces the fuzzed failure directly: the interpreter set
+    filters.categories=["Outdoor & Camping Gear"] for the whole request while
+    separately (and correctly) planning a Footwear bucket. A single
+    request-global category value cannot describe every bucket in a
+    multi-category request; the bucket's own catalogue_paths is the
+    authoritative, per-bucket type gate and must win when the two disagree
+    entirely."""
+    boots = [make_product(f"boot{i}", category="Footwear", subcategory="Boots") for i in range(3)]
+    vectors = np.tile(np.eye(1, 384, dtype=np.float32), (len(boots), 1))
+    catalogue = Catalogue(boots, vectors)
+    footwear_bucket = Bucket(
+        name="Footwear",
+        search_phrases=["trekking boots"],
+        why_needed="Footwear for the trek.",
+        catalogue_paths=["Footwear/Boots"],
+    )
+
+    results = search_bucket(
+        catalogue,
+        query_vectors=vectors[0],
+        bucket=footwear_bucket,
+        filters=QueryFilters(categories=["Outdoor & Camping Gear"]),
+        context=MILD,
+        limit=8,
+    )
+
+    assert results, "a bucket's own catalogue_paths must not be overridden by an unrelated global category filter"
+
+
+def test_global_category_filter_still_applies_when_it_overlaps_the_bucket():
+    """The fix is scoped narrowly: when filters.categories genuinely does
+    describe this bucket, it must keep working as a real constraint, not be
+    disabled wholesale."""
+    mens_jacket = make_product("mj", category="Men's Apparel", subcategory="Jackets & Coats")
+    vectors = np.tile(np.eye(1, 384, dtype=np.float32), (1, 384))
+    catalogue = Catalogue([mens_jacket], vectors)
+    bucket = Bucket(
+        name="Layering",
+        search_phrases=["jacket"],
+        why_needed="x",
+        catalogue_paths=["Men's Apparel/Jackets & Coats", "Women's Apparel/Jackets & Coats"],
+    )
+
+    results = search_bucket(
+        catalogue, query_vectors=vectors[0], bucket=bucket,
+        filters=QueryFilters(categories=["Women's Apparel"]), context=MILD, limit=8,
+    )
+    assert results == [], "an overlapping-but-narrower global category filter must still exclude"
 
 
 def test_catalogue_rejects_misaligned_embedding_matrix():
@@ -394,6 +495,21 @@ def test_matches_paths_is_exact():
     assert matches_paths(boot, ["Footwear/Boots"])
     assert not matches_paths(boot, ["Footwear/Formal Shoes"])
     assert not matches_paths(boot, []), "an empty path list accepts nothing"
+
+
+def test_matches_paths_tolerates_a_leading_or_trailing_slash():
+    """Fuzzed against a stronger local model: it returned catalogue_paths
+    with a leading slash ("/Men's Apparel/Jackets & Coats"), which fails an
+    exact-match test as completely as a wrong path -- zero candidates, no
+    error. The formatting is noise; the path underneath was correct."""
+    from app.services.retrieval import matches_paths
+
+    boot = make_product("b", category="Footwear", subcategory="Boots")
+    assert matches_paths(boot, ["/Footwear/Boots"])
+    assert matches_paths(boot, ["Footwear/Boots/"])
+    assert not matches_paths(boot, ["/Footwear/Formal Shoes"]), (
+        "normalizing formatting must not make a genuinely wrong path match"
+    )
 
 
 # --- contextual suitability: the monsoon / winter-jacket defect ------------

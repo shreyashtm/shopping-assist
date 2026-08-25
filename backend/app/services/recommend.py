@@ -12,8 +12,7 @@ interpretation either.
 
 Failure policy: never show an empty screen. If the LLM is unreachable the
 request falls through to a keyword interpretation and the response says so via
-`degraded_mode`, rather than returning nothing or pretending the weaker result
-is the real thing.
+`degraded_mode`, rather than returning nothing or pretending the weaker result.
 """
 
 import logging
@@ -54,6 +53,7 @@ from app.services.retrieval import (
     ScoredProduct,
     dedupe_across_buckets,
     is_group_worth_showing,
+    sanitize_categories,
     search_bucket,
 )
 
@@ -313,6 +313,13 @@ def recommend_events(
         structured = structured.model_copy(
             update={"filters": _with_overrides(structured.filters, payload.filters)}
         )
+
+    # Sanitized once here rather than inside passes_filters(): filters are
+    # shared across every bucket's search, so this only needs doing once per
+    # request, not once per candidate product.
+    structured = structured.model_copy(
+        update={"filters": sanitize_categories(structured.filters)}
+    )
 
     # --- 1b. Resolve conditions (Open-Meteo, no LLM) -----------------------
     yield "stage", "checking conditions"

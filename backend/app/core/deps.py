@@ -73,6 +73,16 @@ def load_provider() -> LLMProvider | None:
     global _provider
     settings = get_settings()
 
+    if settings.llm_provider == "local":
+        # No key check: Ollama's local server doesn't need one. A missing or
+        # unreachable server surfaces as LLMUnavailable on the first call and
+        # degrades normally, same as any other transport failure.
+        from app.adapters.llm.local_provider import LocalProvider
+
+        _provider = LocalProvider(base_url=settings.local_llm_base_url, timeout_s=settings.llm_timeout_s)
+        logger.info("LLM provider ready (local, interpret=%s)", settings.interpret_model)
+        return _provider
+
     if settings.llm_provider == "openrouter":
         if not settings.openrouter_api_key:
             logger.warning(

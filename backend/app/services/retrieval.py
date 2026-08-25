@@ -46,6 +46,7 @@ from app.schemas.product import Product
 from app.schemas.query import Bucket, ContextConstraints, QueryFilters, ResolvedContext
 from app.services.catalogue import Catalogue
 from app.services import suitability
+from app.services.taxonomy import ALL_PATHS, PRODUCT_TAXONOMY
 
 # Boost weights, applied multiplicatively against the semantic score. Their sum
 # is the most a perfectly-tagged product can gain (here ~1.6x), which keeps them
@@ -141,6 +142,17 @@ class ScoredProduct:
         return f"<{self.product.id} score={self.score:.3f}>"
 
 
+def _normalize_path(path: str) -> str:
+    """Tolerate the formatting noise a model adds around an otherwise-correct
+    path -- a leading/trailing slash was the concrete case (a local-model
+    fuzzing run returned "/Men's Apparel/Jackets & Coats"), which fails an
+    exact-match test just as completely as a wrong path does. Normalizing
+    both sides the same way can only ever accept a path that was already
+    right in substance; it cannot make a genuinely wrong path match.
+    """
+    return path.strip().strip("/")
+
+
 def matches_paths(product: Product, paths: list[str]) -> bool:
     """Whether a product is of a type this slot accepts.
 
@@ -149,7 +161,63 @@ def matches_paths(product: Product, paths: list[str]) -> bool:
     """
     if not paths:
         return False
-    return f"{product.category}/{product.subcategory}" in paths
+    product_path = f"{product.category}/{product.subcategory}"
+    return product_path in paths or any(_normalize_path(p) == product_path for p in paths)
+
+
+def sanitize_categories(filters: QueryFilters) -> QueryFilters:
+    """Drop any `filters.categories` entry that isn't a real category or a
+    real Category/Subcategory path.
+
+    Nothing in the interpreter's schema tells the model what this field
+    should contain -- confirmed by fuzzing it against a local model, which
+    filled it with plain topic words ("trekking", "outdoor") rather than
+    anything from the taxonomy. Matched literally, that zeroes out every
+    candidate in every bucket: the exact "nothing matched" failure this
+    exists to prevent.
+
+    An unrecognized value is far more likely to be model confusion than a
+    deliberate "show nothing" instruction, so it is dropped rather than
+    enforced. If every supplied value turns out unrecognized, this leaves no
+    category constraint at all -- `bucket.catalogue_paths` already does the
+    real type-correctness gating per bucket (and is far more reliably
+    populated, since the prompt describes its exact format at length), so a
+    fully-noisy `filters.categories` costs nothing to ignore.
+    """
+    if not filters.categories:
+        return filters
+    known = [c for c in filters.categories if c in PRODUCT_TAXONOMY or c in ALL_PATHS]
+    if len(known) == len(filters.categories):
+        return filters
+    return filters.model_copy(update={"categories": known})
+
+
+def _relevant_categories(filters: QueryFilters, bucket: Bucket) -> list[str]:
+    """The category constraint that actually applies to this bucket.
+
+    `filters.categories` is one request-global value, but a multi-bucket
+    request legitimately spans several different top-level categories -- a
+    trek needs Men's Apparel *and* Footwear *and* Bags & Luggage, each in its
+    own bucket. Enforcing one global category list against every bucket
+    equally can reject a bucket's own, more specific and far more reliably
+    populated `catalogue_paths` outright: fuzzing surfaced exactly this,
+    where the model set filters.categories=["Outdoor & Camping Gear"] for
+    the whole request while separately (and correctly) planning a Footwear
+    bucket, and the global filter silently zeroed it.
+
+    If nothing in `filters.categories` overlaps the categories this bucket's
+    own paths already require, `catalogue_paths` wins and the global
+    constraint is dropped for this bucket only -- it was never describing
+    this bucket in the first place.
+    """
+    if not filters.categories:
+        return []
+    bucket_categories = {path.split("/")[0] for path in bucket.catalogue_paths}
+    relevant = [
+        c for c in filters.categories
+        if c in bucket_categories or c.split("/")[0] in bucket_categories
+    ]
+    return relevant
 
 
 def passes_filters(product: Product, filters: QueryFilters) -> bool:
@@ -169,7 +237,24 @@ def passes_filters(product: Product, filters: QueryFilters) -> bool:
         return False
     if filters.price_max is not None and product.price_inr > filters.price_max:
         return False
-    if filters.gender and product.attributes.gender not in (filters.gender, "unisex"):
+    # "unisex" means two different things depending which side of this check
+    # it's on. As a product tag it means "fits any requested gender" (handled
+    # by the `"unisex"` in the tuple below). As a *requested* filter it means
+    # "no preference between men's and women's" -- the GENDER_QUESTION chip
+    # is literally labelled "Anyone / unisex" -- not "show only the
+    # literally-unisex-tagged 4% of the catalogue". Fuzzing against a local
+    # model surfaced the gap concretely: a men's-dominant category (77
+    # products, 3 tagged unisex) collapsed to those 3 the moment the
+    # interpreter set gender="unisex", emptying a bucket whose
+    # catalogue_paths were otherwise entirely correct.
+    #
+    # "kids" stays excluded even under a unisex request: it's a distinct,
+    # deliberate category (age-appropriateness, not cut), and nobody asked
+    # for it just by expressing no preference between men's and women's.
+    if filters.gender == "unisex":
+        if product.attributes.gender == "kids":
+            return False
+    elif filters.gender and product.attributes.gender not in (filters.gender, "unisex"):
         return False
     if filters.categories:
         product_path = f"{product.category}/{product.subcategory}"
@@ -491,11 +576,15 @@ def search_bucket(
     if not bucket.catalogue_paths:
         return []
 
+    bucket_filters = filters.model_copy(
+        update={"categories": _relevant_categories(filters, bucket)}
+    )
+
     scored: list[ScoredProduct] = []
     for index, product in enumerate(catalogue.products):
         if not matches_paths(product, bucket.catalogue_paths):
             continue
-        if not passes_filters(product, filters):
+        if not passes_filters(product, bucket_filters):
             continue
         if not passes_occasion_context(product, bucket):
             continue
