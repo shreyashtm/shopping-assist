@@ -229,3 +229,38 @@ def test_no_paths_or_no_taxonomy_leaves_questions_alone():
 
     assert drop_unsatisfiable_budget_options([question], [], _price_taxonomy()) == [question]
     assert drop_unsatisfiable_budget_options([question], ["Ethnic Wear/Sarees"], {}) == [question]
+
+
+# --- Chip values must mean what their prefix claims ------------------------
+#
+# Observed live: for "trip to goa" the model offered occasion:beach_casual and
+# occasion:dining. Neither is in the closed OCCASIONS vocabulary, so neither
+# can ever match product.attributes.occasion or earn BOOST_OCCASION. The value
+# still widens bucket search phrases, so it is not inert -- but an `occasion:`
+# chip that cannot act as an occasion is not doing what the prefix claims, and
+# the shopper has no way to see the difference.
+#
+# Same family as the budget chips that could not be satisfied: the model
+# proposes, and deterministic code has to check the proposal against the
+# vocabulary the runtime actually understands.
+
+
+def test_out_of_vocabulary_occasion_is_normalised_not_silently_kept():
+    from app.services.interpreter import canonical_answer_value
+
+    assert canonical_answer_value("occasion:beach_casual") == "use_case:beach casual"
+    assert canonical_answer_value("occasion:dining") == "use_case:dining"
+
+
+def test_in_vocabulary_occasion_is_left_alone():
+    from app.services.interpreter import canonical_answer_value
+
+    assert canonical_answer_value("occasion:wedding") == "occasion:wedding"
+    assert canonical_answer_value("occasion:party") == "occasion:party"
+
+
+def test_non_occasion_values_pass_through_untouched():
+    from app.services.interpreter import canonical_answer_value
+
+    for value in ("gender:men", "price_max:500", "start_date:2026-10-25", "use_case:trekking"):
+        assert canonical_answer_value(value) == value

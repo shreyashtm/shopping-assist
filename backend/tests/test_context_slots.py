@@ -4,8 +4,8 @@ from datetime import date
 
 from app.schemas.query import (
     Bucket,
-    ClimateContext,
     ClarifyingQuestion,
+    ClimateContext,
     QueryFilters,
     ResolvedContext,
     StructuredQuery,
@@ -298,3 +298,117 @@ def test_non_canonical_slot_question_is_not_reasked_once_answered():
     assert not updated.needs_clarification, (
         "all needed slots are known, so the recommendation stage should be reached"
     )
+
+
+# --- A dependency question must outrank a speculative one ------------------
+#
+# Real report: "suggest dress for my trip to goa" asked about gender, budget,
+# and "activity or style preference" -- but never asked *when* the trip was.
+# The date is the only missing value that unlocks the Open-Meteo lookup, and
+# the model spent its whole question budget on things it could have assumed.
+#
+# Cause: apply_context_audit merged as `model_questions + deterministic_extras`
+# and then truncated to 4. Deterministic gap-fillers were appended last, so a
+# chatty model crowded out the one question that unblocks measured weather.
+#
+# A date is a *dependency* -- nothing measured happens without it. Gender and
+# budget are filters, useful but not blocking. Order has to reflect that.
+
+
+def _model_question(slot: str, n: int) -> ClarifyingQuestion:
+    from app.schemas.query import QuestionOption
+
+    return ClarifyingQuestion(
+        slot=slot,
+        question=f"Model question {n}?",
+        options=[
+            QuestionOption(
+                label="A",
+                value=f"{slot}:men" if slot == "gender" else "occasion:party",
+            ),
+            QuestionOption(
+                label="B",
+                value=f"{slot}:women" if slot == "gender" else "occasion:travel",
+            ),
+        ],
+    )
+
+
+def _dateless_trip() -> StructuredQuery:
+    """A named place with no date -- climate cannot resolve until asked."""
+    return _trek_query(
+        location="Goa", start_date=None, end_date=None, duration_days=None, climate=None
+    )
+
+
+def test_date_question_survives_a_chatty_model():
+    """Four model questions must not crowd out the one that unblocks weather."""
+    structured = _dateless_trip()
+    structured = structured.model_copy(
+        update={
+            "needs_clarification": True,
+            "questions": [_model_question("occasion", i) for i in range(4)],
+        }
+    )
+
+    updated, _ = apply_context_audit(structured, [], today=date(2026, 8, 25))
+
+    slots = [q.slot for q in updated.questions]
+    assert "dates" in slots, f"date question was dropped; got {slots}"
+
+
+def test_date_question_is_asked_first():
+    structured = _dateless_trip()
+    structured = structured.model_copy(
+        update={
+            "needs_clarification": True,
+            "questions": [_model_question("occasion", 0), _model_question("gender", 1)],
+        }
+    )
+
+    updated, _ = apply_context_audit(structured, [], today=date(2026, 8, 25))
+
+    assert updated.questions[0].slot == "dates"
+
+
+def test_a_dated_trip_is_not_asked_for_dates():
+    """The priority rule must not start asking when nothing is missing."""
+    structured = _trek_query()
+    structured = structured.model_copy(
+        update={"needs_clarification": True, "questions": [_model_question("gender", 0)]}
+    )
+
+    updated, _ = apply_context_audit(structured, [], today=date(2026, 8, 25))
+
+    assert "dates" not in [q.slot for q in updated.questions]
+
+
+def test_a_beach_trip_is_asked_for_dates_too():
+    """Dates were gated on trek vocabulary -- trek, hike, mountain, pass,
+    altitude. "suggest dress for my trip to goa" matched none of them, so the
+    date was never treated as missing and conditions came back unavailable.
+
+    But Goa in August is monsoon and in December is peak season: the date
+    matters for any trip whose conditions drive the packing list, not only for
+    treks. (The Hampta Pass case only ever worked because "Pass" is in the
+    hint list.)
+    """
+    structured = _dateless_trip()
+    structured = structured.model_copy(
+        update={
+            "intent_summary": "Clothing for a trip to Goa",
+            "buckets": [
+                Bucket(
+                    name="Holiday Clothing",
+                    search_phrases=["light dresses for a beach holiday"],
+                    why_needed="Warm coastal weather.",
+                    catalogue_paths=["Women's Apparel/Dresses"],
+                )
+            ],
+        }
+    )
+
+    _, slots = apply_context_audit(structured, [], today=date(2026, 8, 25))
+
+    dates = next((s for s in slots if s.name == "dates"), None)
+    assert dates is not None and dates.status == "needed"

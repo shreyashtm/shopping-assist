@@ -255,13 +255,22 @@ currently early-returns with empty `groups`) and to `context_slots.py` (a
 question should only be asked when answering it would actually change the
 derived constraint set, not from a fixed list).
 
-### Upfront Date/Time Question
+### Upfront Date/Time Question (done)
 
-`_DATES_QUESTION` in `context_slots.py` currently offers vague timing buckets
-("within 2 weeks", "next 1-3 months") that cannot be turned into a date range
-for the Open-Meteo lookup. Asking for an actual date (or date range) up front
-would let climate resolve correctly on the first pass, removing a follow-up
-round-trip for any request that implies weather-dependent recommendations.
+`_dates_question()` now carries concrete `start_date`/`duration_days` pairs
+anchored to today, so answering it resolves climate on the same turn rather
+than recording a prose assumption.
+
+Two further defects were found on top of that. The slot was only marked
+"needed" when the text matched trek vocabulary (*trek, hike, mountain, pass,
+altitude*), so "suggest dress for my trip to goa" never had its missing date
+recognised -- Hampta Pass only worked because "Pass" is in that list. And even
+when the question existed, `apply_context_audit` merged model questions ahead
+of deterministic ones before truncating to four, so a chatty model could push
+the date question out entirely. The gate now covers any trip whose conditions
+drive the packing list, and `_BLOCKING_SLOTS` is asked first: a date is a
+dependency, while gender and budget only narrow an answer that already
+exists.
 
 ### Kaggle Fashion Ingestion -- Completion
 

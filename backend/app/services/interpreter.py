@@ -24,6 +24,7 @@ from typing import Any
 
 from app.adapters.llm.base import LLMProvider
 from app.schemas.query import StructuredQuery
+from app.services.taxonomy import OCCASIONS
 
 logger = logging.getLogger(__name__)
 
@@ -457,6 +458,31 @@ def interpret(
     return structured
 
 
+def canonical_answer_value(value: str) -> str:
+    """Relabel a chip value whose prefix promises more than it can deliver.
+
+    `occasion` is a closed vocabulary (services/taxonomy.py::OCCASIONS) that
+    retrieval matches against `product.attributes.occasion` to award
+    BOOST_OCCASION. The model does not always stay inside it -- a Goa trip
+    produced `occasion:beach_casual` and `occasion:dining`, neither of which
+    any product can carry, so neither could ever boost anything.
+
+    Such a value is not inert: merge_answers widens the bucket search phrases
+    with it, which is genuinely useful. Relabelling it `use_case:` says so
+    honestly instead of leaving an occasion chip that cannot act as an
+    occasion. Underscores become spaces because the widened phrase is embedded
+    as text, and "beach_casual" is not a phrase anyone writes.
+
+    Anything already in the vocabulary, and every other key, is untouched.
+    """
+    key, sep, raw = value.partition(":")
+    if not sep or key.strip() != "occasion":
+        return value
+    if raw.strip().lower() in OCCASIONS:
+        return value
+    return f"use_case:{raw.strip().replace('_', ' ').replace('-', ' ')}"
+
+
 def merge_answers(structured: StructuredQuery, answers: list[str]) -> StructuredQuery:
     """Fold tapped chip values into the query.
 
@@ -466,7 +492,9 @@ def merge_answers(structured: StructuredQuery, answers: list[str]) -> Structured
     """
     for answer in answers:
         for pair in answer.split(","):
-            key, _, value = pair.partition(":")
+            # Relabel a chip whose prefix promises more than it can deliver,
+            # before anything reads the key -- see canonical_answer_value().
+            key, _, value = canonical_answer_value(pair).partition(":")
             key, value = key.strip(), value.strip()
             if not value:
                 continue

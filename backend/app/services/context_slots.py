@@ -78,6 +78,15 @@ def _dates_question(today: date) -> ClarifyingQuestion:
     )
 
 _TREK_HINTS = ("trek", "hike", "hiking", "mountain", "pass", "expedition", "camp", "altitude")
+# Any trip whose conditions drive the packing list, not only treks. Dates used
+# to be gated on _TREK_HINTS alone, so "suggest dress for my trip to goa"
+# never had its missing date recognised and conditions came back unavailable
+# -- while Hampta Pass only worked because "Pass" happens to be a trek hint.
+# Goa in August is monsoon and in December is peak season; the date is what
+# separates them.
+_TRIP_HINTS = (
+    "trip", "travel", "holiday", "vacation", "getaway", "visit", "tour", "beach",
+)
 _APPAREL_HINTS = (
     "shirt", "t-shirt", "tshirt", "top", "dress", "jeans", "trouser", "jacket", "wear",
 )
@@ -109,6 +118,16 @@ def _text_blob(structured: StructuredQuery) -> str:
 
 def _implies_trek(text: str) -> bool:
     return any(token in text for token in _TREK_HINTS)
+
+
+def _implies_dated_trip(text: str) -> bool:
+    """Whether conditions -- and therefore the date -- drive this request.
+
+    Broader than `_implies_trek`: a beach holiday needs a date as much as a
+    Himalayan crossing does, because the same coastline is monsoon in August
+    and peak season in December.
+    """
+    return _implies_trek(text) or any(token in text for token in _TRIP_HINTS)
 
 
 def _implies_apparel(text: str) -> bool:
@@ -186,7 +205,7 @@ def build_context_variables(
                 value=date_label,
             )
         )
-    elif ctx.location and _implies_trek(text):
+    elif ctx.location and _implies_dated_trip(text):
         slots.append(ContextVariable(name="dates", label="Dates", status="needed"))
 
     climate = ctx.climate
@@ -279,6 +298,14 @@ def _budget_label(structured: StructuredQuery) -> str:
     if filters.price_min:
         return f"₹{filters.price_min:,}+"
     return "Set"
+
+
+# Slots that gate a downstream capability rather than merely narrowing the
+# result. Only dates qualify today: without one, resolve_climate() cannot run
+# at all, so every temperature-sensitive boost and penalty stays dark. These
+# are asked ahead of model-generated questions, which compete for the same
+# four-question budget.
+_BLOCKING_SLOTS = frozenset({"dates"})
 
 
 def _question_for_slot(name: str, today: date) -> ClarifyingQuestion | None:
@@ -387,7 +414,18 @@ def apply_context_audit(
         if question is not None:
             extra.append(question)
 
-    merged = questions + [q for q in extra if q.slot not in existing]
+    # Dependency questions first, then the model's own.
+    #
+    # A date is not just another filter: nothing measured happens without it,
+    # because Open-Meteo cannot be queried for "sometime". Gender and budget
+    # narrow an answer that already exists. Merging as `model + extras` and
+    # truncating to 4 meant a chatty model crowded out the one question that
+    # unblocks measured weather -- reported as "suggest dress for my trip to
+    # goa" asking about gender, budget and "activity or style preference"
+    # while never asking *when*, then reporting conditions unavailable.
+    blocking = [q for q in extra if q.slot in _BLOCKING_SLOTS and q.slot not in existing]
+    rest = [q for q in extra if q.slot not in _BLOCKING_SLOTS and q.slot not in existing]
+    merged = blocking + questions + rest
     needs = bool(merged)
     if needs:
         structured = structured.model_copy(
