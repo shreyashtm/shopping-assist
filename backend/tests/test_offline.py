@@ -121,3 +121,8 @@ def test_a_broad_route_gives_up_shelves_a_named_item_covers():
 def test_a_broad_route_alone_keeps_all_its_shelves():
     trek = build_offline_query("trekking gear for a cold trek", []).buckets[0]
     assert "Men's Apparel/Jackets & Coats" in trek.catalogue_paths
+
+
+def test_occasion_heading_reads_naturally():
+    b = build_offline_query("a gift hamper for my parents' 25th anniversary", []).buckets[0]
+    assert b.why_needed == "You asked for a gift hamper, for an anniversary."

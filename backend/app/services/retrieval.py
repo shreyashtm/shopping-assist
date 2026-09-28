@@ -176,6 +176,10 @@ EVIDENCE_POPULARITY = 6
 # about this request, which the generic fallback sentence is not.
 EVIDENCE_BUDGET = 7
 
+# Catalogue material values that name no material. "Built with assorted" was
+# shown to shoppers as if it were a fact about the product.
+_UNINFORMATIVE_MATERIALS = frozenset({"assorted", "mixed", "various", "other", "unknown"})
+
 # Below this a rating is too thinly sourced to quote at a shopper.
 MIN_REVIEWS_TO_CITE = 50
 
@@ -652,10 +656,9 @@ def score_product(
     # Explanation-only: material earns no boost because there is no evidence it
     # predicts fit, but "built with down" is a concrete thing to say about a
     # product whose tags happened to match nothing.
-    if product.attributes.material:
-        evidence.append(
-            (EVIDENCE_MATERIAL, f"built with {product.attributes.material.lower()}")
-        )
+    material = (product.attributes.material or "").strip().lower()
+    if material and material not in _UNINFORMATIVE_MATERIALS:
+        evidence.append((EVIDENCE_MATERIAL, f"built with {material}"))
 
     # Budget preference, not a filter. `passes_filters` no longer excludes on
     # price_min, so this is what keeps a stated range meaningful: an in-range

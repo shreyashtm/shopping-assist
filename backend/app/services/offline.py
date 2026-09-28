@@ -17,6 +17,7 @@ from app.schemas.query import (
     ResolvedContext,
     StructuredQuery,
 )
+from app.services.taxonomy import OCCASIONS
 
 # Keyword -> (bucket name, canonical catalogue paths, catalogue-language phrase).
 #
@@ -192,6 +193,11 @@ _LEADING_FILLER = re.compile(
 )
 _EDGE_STOPWORDS = {"for", "my", "to", "the", "in", "of", "on", "some", "me", "i", "your"}
 _ARTICLES = {"a", "an", "the", "some"}
+_OCCASION_PHRASES = {
+    "wedding": "a wedding", "anniversary": "an anniversary", "birthday": "a birthday",
+    "festive": "a festive occasion", "interview": "an interview", "party": "a party",
+    "office": "office", "travel": "travel",
+}
 
 
 def _claim(text: str, pattern: str) -> str:
@@ -243,6 +249,26 @@ def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
             if " " in word or "-" in word:
                 single_word_text = _claim(single_word_text, rf"\b{re.escape(word)}")
 
+    # Words after "for" describe the purpose of an item already named in the
+    # same clause -- "running shoes for the gym", "a bag for office" -- not a
+    # second item. Keywords there open no group of their own (an occasion in
+    # them still reaches the item, below). Live, "for the gym" had opened a
+    # group of dumbbell sets under a request for shoes.
+    item_words = [
+        word for keywords, *_ in _ROUTES for word in keywords
+    ]
+    for clause in _CLAUSE_SPLIT.split(single_word_text):
+        purpose = re.search(r"\bfor\b", clause)
+        if not purpose:
+            continue
+        head = clause[: purpose.start()]
+        if any(re.search(rf"\b{re.escape(w)}", head) for w in item_words):
+            tail = clause[purpose.start():]
+            offset = single_word_text.index(clause) + purpose.start()
+            single_word_text = (
+                single_word_text[:offset] + " " * len(tail) + single_word_text[offset + len(tail):]
+            )
+
     matched = []
     for keywords, bucket_name, paths, phrase in _ROUTES:
         # Word-start match, not substring: "top" must not fire inside
@@ -272,16 +298,28 @@ def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
         kept = [p for p in paths if p not in claimed]
         narrowed.append((start, bucket_name, kept or paths, phrase))
 
+    # An occasion belongs to the whole request: "a gift hamper for my
+    # parents' 25th anniversary" is an anniversary hamper, even though the
+    # words around "hamper" are only "a gift hamper". Dropping it let a
+    # "Bhaiya Bhabhi" hamper win, because retrieval's occasion check never
+    # saw the word. Other items stay out of each group; only occasions carry.
+    occasions = [o for o in OCCASIONS if o != "everyday" and re.search(rf"\b{o}", text)]
+
     # In the order the shopper asked, not the order of this table.
     for start, bucket_name, paths, phrase in sorted(narrowed, key=lambda m: m[0]):
         asked = _what_was_asked(text, start)
         search = " ".join(w for w in asked.split() if w not in _ARTICLES) or phrase
+        extra = [o for o in occasions if o not in asked]
+        if extra:
+            search = f"{search} for {' and '.join(extra)}"
+        occasion_words = " and ".join(_OCCASION_PHRASES.get(o, o) for o in extra)
         categories.extend(p.split("/")[0] for p in paths)
         buckets.append(
             Bucket(
                 name=bucket_name,
                 search_phrases=list(dict.fromkeys([phrase, search])),
-                why_needed=f"You asked for {asked or phrase}.",
+                why_needed=f"You asked for {asked or phrase}"
+                + (f", for {occasion_words}" if extra else "") + ".",
                 role="recommended",
                 catalogue_paths=paths,
             )

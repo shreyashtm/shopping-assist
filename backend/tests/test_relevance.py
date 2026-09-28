@@ -129,3 +129,46 @@ def test_a_sleeping_bag_request_leads_with_sleeping_bags(catalogue):
     groups = _cards(catalogue, "a sleeping bag for camping")
     first = next(iter(groups.values()))[0]
     assert "sleeping bag" in first.product.title.lower(), first.product.title
+
+
+def test_an_occasion_in_the_request_applies_to_the_item_asked_for(catalogue):
+    """Live: a "Bhaiya Bhabhi" (brother and sister-in-law) hamper, tagged
+    festive/wedding/everyday, was the best match for a parents' 25th
+    anniversary once groups stopped seeing the rest of the request."""
+    groups = _cards(catalogue, "a gift hamper for my parents' 25th anniversary")
+    for items in groups.values():
+        for item in items:
+            occasions = item.product.attributes.occasion
+            assert not occasions or "anniversary" in occasions, (item.product.title, occasions)
+
+
+def test_no_reason_cites_a_material_that_says_nothing():
+    """Live: "Made for gifting; built with assorted." -- a catalogue value
+    that names no material, cited to the shopper as if it did."""
+    from app.schemas.product import Product
+    from app.schemas.query import Bucket, ResolvedContext
+    from app.services.retrieval import score_product
+
+    bucket = Bucket(name="Gifts", search_phrases=["gift box"], why_needed="x",
+                    role="required", catalogue_paths=["Gifting/Hampers"])
+    for material in ("Assorted", "mixed", "Various", "Leather"):
+        product = Product(
+            id="p", title="Gift Box", brand="B", category="Gifting", subcategory="Hampers",
+            price_inr=1000, description="d", retailer="Amazon.in",
+            product_url="https://example.com/p", attributes={"material": material},
+        )
+        reasons = score_product(product, 0.5, bucket, ResolvedContext()).reasons
+        cited = any(r.startswith("built with") for r in reasons)
+        assert cited == (material == "Leather"), (material, reasons)
+
+
+def test_a_purpose_after_for_does_not_open_a_second_group(catalogue):
+    """Live: "running shoes for the gym and morning jogs" showed four
+    dumbbell sets under "You asked for shoes for the gym"."""
+    groups = _cards(catalogue, "running shoes for the gym and morning jogs", ["gender:men"])
+    assert list(groups) == ["Footwear"], list(groups)
+
+
+def test_a_purpose_still_counts_when_it_is_the_request(catalogue):
+    """"gym equipment" and "a bag and gym gloves" name gym gear as an item."""
+    assert "Fitness Gear" in _cards(catalogue, "home gym equipment and dumbbells")
