@@ -14487,7 +14487,7 @@
     "title": "Mens Casual Shorts",
     "brand": "Generic",
     "category": "Men's Apparel",
-    "subcategory": "Formal Shirts",
+    "subcategory": "Shorts",
     "price_inr": 1991,
     "mrp_inr": null,
     "rating": 4.3,
@@ -22120,7 +22120,7 @@
     "title": "Sheer Knee High Stockings for Women",
     "brand": "Generic",
     "category": "Women's Apparel",
-    "subcategory": "Trousers",
+    "subcategory": "Socks & Hosiery",
     "price_inr": 1407,
     "mrp_inr": null,
     "rating": 4.3,
@@ -29276,44 +29276,6 @@
     "link_verified_at": null
   },
   {
-    "id": "kag-b09mjhdbm5",
-    "title": "Mens Lace Up Black Tap Shoes Leather Oxford Dance Shoe",
-    "brand": "Generic",
-    "category": "Footwear",
-    "subcategory": "Formal Shoes",
-    "price_inr": 2818,
-    "mrp_inr": null,
-    "rating": 4.2,
-    "review_count": 0,
-    "retailer": "Amazon.com (2024 archive)",
-    "product_url": "https://www.amazon.com/dp/B09MJHDBM5",
-    "image_url": "https://m.media-amazon.com/images/I/61aXWvUKGjL._AC_UL320_.jpg",
-    "description": "A leather lace-up oxford-style tap dance shoe for performance and formal dance wear.",
-    "attributes": {
-      "gender": "men",
-      "season": [
-        "all-season"
-      ],
-      "use_case": [
-        "formal"
-      ],
-      "occasion": [
-        "party",
-        "everyday"
-      ],
-      "material": "leather",
-      "temp_rating_c": null,
-      "is_giftable": false,
-      "water_resistance": "none",
-      "layer": null,
-      "formality": "formal",
-      "breathability": "low"
-    },
-    "in_stock": true,
-    "link_status": "archival",
-    "link_verified_at": null
-  },
-  {
     "id": "kag-b08p9b5jnr",
     "title": "Unisex-Adult 5 Tie Shoe Oxford",
     "brand": "Generic",
@@ -33568,7 +33530,7 @@
     "title": "Kipuka Hulu Men's Leather Slippers",
     "brand": "OluKai",
     "category": "Footwear",
-    "subcategory": "Casual Sneakers",
+    "subcategory": "Sandals & Floaters",
     "price_inr": 10790,
     "mrp_inr": null,
     "rating": 4.7,
@@ -33601,7 +33563,7 @@
     "title": "Moloa Hulu Men's Wool-Blend Slippers",
     "brand": "OluKai",
     "category": "Footwear",
-    "subcategory": "Casual Sneakers",
+    "subcategory": "Sandals & Floaters",
     "price_inr": 8300,
     "mrp_inr": null,
     "rating": 4.7,
@@ -36769,37 +36731,6 @@
     "link_verified_at": null
   },
   {
-    "id": "kag-b0bx73brrr",
-    "title": "Emideary 1 Year Sobriety Engraved Wallet Card",
-    "brand": "Generic",
-    "category": "Gifting",
-    "subcategory": "Keepsakes",
-    "price_inr": 1075,
-    "mrp_inr": null,
-    "rating": 4.9,
-    "review_count": 0,
-    "retailer": "Amazon.com (2024 archive)",
-    "product_url": "https://www.amazon.com/dp/B0BX73BRRR",
-    "image_url": "https://m.media-amazon.com/images/I/71VNCqTcmFL._AC_UL320_.jpg",
-    "description": "Engraved metal wallet card commemorating one year of sobriety, designed as a keepsake gift for men or women.",
-    "attributes": {
-      "gender": "unisex",
-      "season": [
-        "all-season"
-      ],
-      "use_case": [
-        "gifting"
-      ],
-      "occasion": [],
-      "material": "metal",
-      "temp_rating_c": null,
-      "is_giftable": true
-    },
-    "in_stock": true,
-    "link_status": "archival",
-    "link_verified_at": null
-  },
-  {
     "id": "kag-b01m2cudik",
     "title": "Harry Potter Hogwarts Alumni Jrs. Gift Set Makeup Case Zip Wallet & Coin Purse",
     "brand": "Harry Potter",
@@ -36814,7 +36745,7 @@
     "image_url": "https://m.media-amazon.com/images/I/81Y1IL04IgL._AC_UL320_.jpg",
     "description": "Harry Potter Hogwarts Alumni themed gift set including a makeup case, zip wallet, and coin purse.",
     "attributes": {
-      "gender": "women",
+      "gender": "kids",
       "season": [
         "all-season"
       ],
@@ -42520,39 +42451,6 @@
     "link_verified_at": null
   },
   {
-    "id": "kag-b018hqlpes",
-    "title": "Canvas Web Belts for Men",
-    "brand": "Generic",
-    "category": "Watches & Jewellery",
-    "subcategory": "Jewellery",
-    "price_inr": 1153,
-    "mrp_inr": null,
-    "rating": 4.4,
-    "review_count": 0,
-    "retailer": "Amazon.com (2024 archive)",
-    "product_url": "https://www.amazon.com/dp/B018HQLPES",
-    "image_url": "https://m.media-amazon.com/images/I/71yCvElA9mL._AC_UL320_.jpg",
-    "description": "A durable canvas web belt for men featuring a military-style D-ring buckle for everyday wear.",
-    "attributes": {
-      "gender": "men",
-      "season": [
-        "all-season"
-      ],
-      "use_case": [
-        "daily-wear"
-      ],
-      "occasion": [
-        "everyday"
-      ],
-      "material": "canvas",
-      "temp_rating_c": null,
-      "is_giftable": false
-    },
-    "in_stock": true,
-    "link_status": "archival",
-    "link_verified_at": null
-  },
-  {
     "id": "kag-b0bybkzhky",
     "title": "6 Pack Hook Clip With Key Rings",
     "brand": "Generic",
@@ -42578,39 +42476,6 @@
         "everyday"
       ],
       "material": "metal",
-      "temp_rating_c": null,
-      "is_giftable": false
-    },
-    "in_stock": true,
-    "link_status": "archival",
-    "link_verified_at": null
-  },
-  {
-    "id": "kag-b07d55brhm",
-    "title": "Plus Size 39-75'' Long Double Ring Big Mens Canvas Fabric Cloth Belts Black",
-    "brand": "Generic",
-    "category": "Watches & Jewellery",
-    "subcategory": "Jewellery",
-    "price_inr": 1211,
-    "mrp_inr": null,
-    "rating": 4.7,
-    "review_count": 0,
-    "retailer": "Amazon.com (2024 archive)",
-    "product_url": "https://www.amazon.com/dp/B07D55BRHM",
-    "image_url": "https://m.media-amazon.com/images/I/81CPyLXCF+L._AC_UL320_.jpg",
-    "description": "A plus-size canvas fabric belt with a double ring buckle, designed for larger waist sizes up to 75 inches.",
-    "attributes": {
-      "gender": "men",
-      "season": [
-        "all-season"
-      ],
-      "use_case": [
-        "daily-wear"
-      ],
-      "occasion": [
-        "everyday"
-      ],
-      "material": "canvas",
       "temp_rating_c": null,
       "is_giftable": false
     },
@@ -42722,39 +42587,6 @@
     "link_verified_at": null
   },
   {
-    "id": "kag-b078ph69qz",
-    "title": "Canvas Belt, Web Belt for Men/Women with Metal Double D Ring Buckle 1 1/2\" Wide",
-    "brand": "Generic",
-    "category": "Watches & Jewellery",
-    "subcategory": "Jewellery",
-    "price_inr": 828,
-    "mrp_inr": null,
-    "rating": 4.5,
-    "review_count": 0,
-    "retailer": "Amazon.com (2024 archive)",
-    "product_url": "https://www.amazon.com/dp/B078PH69QZ",
-    "image_url": "https://m.media-amazon.com/images/I/61FubZS+jKL._AC_UL320_.jpg",
-    "description": "A wide canvas web belt with a metal double D-ring buckle suitable for both men and women.",
-    "attributes": {
-      "gender": "unisex",
-      "season": [
-        "all-season"
-      ],
-      "use_case": [
-        "daily-wear"
-      ],
-      "occasion": [
-        "everyday"
-      ],
-      "material": "canvas",
-      "temp_rating_c": null,
-      "is_giftable": false
-    },
-    "in_stock": true,
-    "link_status": "archival",
-    "link_verified_at": null
-  },
-  {
     "id": "kag-b003s7yqkw",
     "title": "Disney Eeyore Brass Key Ring",
     "brand": "Disney",
@@ -42818,39 +42650,6 @@
       "material": "leather",
       "temp_rating_c": null,
       "is_giftable": true
-    },
-    "in_stock": true,
-    "link_status": "archival",
-    "link_verified_at": null
-  },
-  {
-    "id": "kag-b00fia062y",
-    "title": "Designs 38MM Heavy Duty Nylon Web Belt w/ V-Ring Buckle M Grey",
-    "brand": "Generic",
-    "category": "Watches & Jewellery",
-    "subcategory": "Jewellery",
-    "price_inr": 3991,
-    "mrp_inr": null,
-    "rating": 4.5,
-    "review_count": 0,
-    "retailer": "Amazon.com (2024 archive)",
-    "product_url": "https://www.amazon.com/dp/B00FIA062Y",
-    "image_url": "https://m.media-amazon.com/images/I/71Tx4zRyBsL._AC_UL320_.jpg",
-    "description": "A heavy-duty nylon web belt with a V-ring buckle, designed for durable everyday use.",
-    "attributes": {
-      "gender": "men",
-      "season": [
-        "all-season"
-      ],
-      "use_case": [
-        "daily-wear"
-      ],
-      "occasion": [
-        "everyday"
-      ],
-      "material": "nylon",
-      "temp_rating_c": null,
-      "is_giftable": false
     },
     "in_stock": true,
     "link_status": "archival",
@@ -42925,39 +42724,6 @@
     "link_verified_at": null
   },
   {
-    "id": "kag-b09zkgcchm",
-    "title": "Viking Leather Belt Ren Faire Belt Medieval Mens",
-    "brand": "Generic",
-    "category": "Watches & Jewellery",
-    "subcategory": "Jewellery",
-    "price_inr": 1237,
-    "mrp_inr": null,
-    "rating": 4.4,
-    "review_count": 0,
-    "retailer": "Amazon.com (2024 archive)",
-    "product_url": "https://www.amazon.com/dp/B09ZKGCCHM",
-    "image_url": "https://m.media-amazon.com/images/I/61jL5koPLwL._AC_UL320_.jpg",
-    "description": "A wide PU leather ring belt styled after Viking and Renaissance costume designs, suitable for Ren Faire or medieval cosplay outfits.",
-    "attributes": {
-      "gender": "men",
-      "season": [
-        "all-season"
-      ],
-      "use_case": [
-        "party"
-      ],
-      "occasion": [
-        "party"
-      ],
-      "material": "PU leather",
-      "temp_rating_c": null,
-      "is_giftable": true
-    },
-    "in_stock": true,
-    "link_status": "archival",
-    "link_verified_at": null
-  },
-  {
     "id": "kag-b086yckpwt",
     "title": "DAYGOS Key Chain Quick Release Key Ring",
     "brand": "DAYGOS",
@@ -42983,39 +42749,6 @@
         "everyday"
       ],
       "material": "metal",
-      "temp_rating_c": null,
-      "is_giftable": true
-    },
-    "in_stock": true,
-    "link_status": "archival",
-    "link_verified_at": null
-  },
-  {
-    "id": "kag-b07j3fk73t",
-    "title": "Medieval Ring Belt Halloween Cosplay",
-    "brand": "Generic",
-    "category": "Watches & Jewellery",
-    "subcategory": "Jewellery",
-    "price_inr": 517,
-    "mrp_inr": 605,
-    "rating": 4.2,
-    "review_count": 0,
-    "retailer": "Amazon.com (2024 archive)",
-    "product_url": "https://www.amazon.com/dp/B07J3FK73T",
-    "image_url": "https://m.media-amazon.com/images/I/41NiOk582NL._AC_UL320_.jpg",
-    "description": "A medieval-style ring belt intended for Halloween or cosplay costumes.",
-    "attributes": {
-      "gender": "unisex",
-      "season": [
-        "all-season"
-      ],
-      "use_case": [
-        "party"
-      ],
-      "occasion": [
-        "party"
-      ],
-      "material": null,
       "temp_rating_c": null,
       "is_giftable": true
     },
@@ -43115,39 +42848,6 @@
         "everyday"
       ],
       "material": "metal",
-      "temp_rating_c": null,
-      "is_giftable": true
-    },
-    "in_stock": true,
-    "link_status": "archival",
-    "link_verified_at": null
-  },
-  {
-    "id": "kag-b09gykdtdm",
-    "title": "Medieval Belt Viking Belt for Men Renaissance Accessories",
-    "brand": "Generic",
-    "category": "Watches & Jewellery",
-    "subcategory": "Jewellery",
-    "price_inr": 829,
-    "mrp_inr": null,
-    "rating": 4.0,
-    "review_count": 0,
-    "retailer": "Amazon.com (2024 archive)",
-    "product_url": "https://www.amazon.com/dp/B09GYKDTDM",
-    "image_url": "https://m.media-amazon.com/images/I/51Ag4--WYLL._AC_UL320_.jpg",
-    "description": "A leather ring belt styled after Viking and Renaissance knight designs, intended for Ren Faire or medieval cosplay accessories.",
-    "attributes": {
-      "gender": "men",
-      "season": [
-        "all-season"
-      ],
-      "use_case": [
-        "party"
-      ],
-      "occasion": [
-        "party"
-      ],
-      "material": "leather",
       "temp_rating_c": null,
       "is_giftable": true
     },
@@ -43280,39 +42980,6 @@
         "everyday"
       ],
       "material": null,
-      "temp_rating_c": null,
-      "is_giftable": true
-    },
-    "in_stock": true,
-    "link_status": "archival",
-    "link_verified_at": null
-  },
-  {
-    "id": "kag-b0bhqytgyw",
-    "title": "Men Canvas Fabric Belts Casual Web Cloth Belts",
-    "brand": "Generic",
-    "category": "Watches & Jewellery",
-    "subcategory": "Jewellery",
-    "price_inr": 1161,
-    "mrp_inr": null,
-    "rating": 4.7,
-    "review_count": 0,
-    "retailer": "Amazon.com (2024 archive)",
-    "product_url": "https://www.amazon.com/dp/B0BHQYTGYW",
-    "image_url": "https://m.media-amazon.com/images/I/81pE9AWQGtL._AC_UL320_.jpg",
-    "description": "A pack of two canvas fabric web belts for men featuring a black double ring buckle, suited for everyday casual wear.",
-    "attributes": {
-      "gender": "men",
-      "season": [
-        "all-season"
-      ],
-      "use_case": [
-        "daily-wear"
-      ],
-      "occasion": [
-        "everyday"
-      ],
-      "material": "canvas fabric",
       "temp_rating_c": null,
       "is_giftable": true
     },
@@ -43620,39 +43287,6 @@
     "link_verified_at": null
   },
   {
-    "id": "kag-b07j3fxp6j",
-    "title": "TUUFUN Medieval Ring Belt Halloween Cosplay (brown",
-    "brand": "TUUFUN",
-    "category": "Watches & Jewellery",
-    "subcategory": "Jewellery",
-    "price_inr": 605,
-    "mrp_inr": null,
-    "rating": 4.3,
-    "review_count": 0,
-    "retailer": "Amazon.com (2024 archive)",
-    "product_url": "https://www.amazon.com/dp/B07J3FXP6J",
-    "image_url": "https://m.media-amazon.com/images/I/5188fXnR7zL._AC_UL320_.jpg",
-    "description": "A medieval-style ring belt in brown, designed for Halloween or cosplay costumes, measuring 94.48 inches.",
-    "attributes": {
-      "gender": "unisex",
-      "season": [
-        "all-season"
-      ],
-      "use_case": [
-        "party"
-      ],
-      "occasion": [
-        "party"
-      ],
-      "material": "faux leather",
-      "temp_rating_c": null,
-      "is_giftable": true
-    },
-    "in_stock": true,
-    "link_status": "archival",
-    "link_verified_at": null
-  },
-  {
     "id": "kag-b0c33vzqvx",
     "title": "2 Pcs Cute Cartoon Keychain",
     "brand": "Generic",
@@ -43779,39 +43413,6 @@
       "material": "acrylic",
       "temp_rating_c": null,
       "is_giftable": true
-    },
-    "in_stock": true,
-    "link_status": "archival",
-    "link_verified_at": null
-  },
-  {
-    "id": "kag-b07b3df8kw",
-    "title": "Canvas Web D Ring Belt Silver Buckle Military Style for men & women 1 or 3 pcs",
-    "brand": "Generic",
-    "category": "Bags & Luggage",
-    "subcategory": "Wallets",
-    "price_inr": 1490,
-    "mrp_inr": null,
-    "rating": 4.3,
-    "review_count": 0,
-    "retailer": "Amazon.com (2024 archive)",
-    "product_url": "https://www.amazon.com/dp/B07B3DF8KW",
-    "image_url": "https://m.media-amazon.com/images/I/91lCEs2wi4L._AC_UL320_.jpg",
-    "description": "A canvas web belt with a D-ring silver buckle in a military style, suitable for men and women.",
-    "attributes": {
-      "gender": "unisex",
-      "season": [
-        "all-season"
-      ],
-      "use_case": [
-        "daily-wear"
-      ],
-      "occasion": [
-        "everyday"
-      ],
-      "material": "canvas",
-      "temp_rating_c": null,
-      "is_giftable": false
     },
     "in_stock": true,
     "link_status": "archival",
@@ -49531,7 +49132,7 @@
     "title": "Men's Tech 2.0 1/2 Zip-Up Long Sleeve T-Shirt",
     "brand": "Generic",
     "category": "Sports & Fitness",
-    "subcategory": "Yoga",
+    "subcategory": "Activewear",
     "price_inr": 2489,
     "mrp_inr": 3735,
     "rating": 4.6,
@@ -52474,41 +52075,6 @@
       "material": "elastic",
       "temp_rating_c": null,
       "is_giftable": false
-    },
-    "in_stock": true,
-    "link_status": "archival",
-    "link_verified_at": null
-  },
-  {
-    "id": "kag-b099nk8pt5",
-    "title": "1920s White Mens Costume Accessories Set Including Gangster",
-    "brand": "Generic",
-    "category": "Men's Apparel",
-    "subcategory": "Suits & Blazers",
-    "price_inr": 1493,
-    "mrp_inr": null,
-    "rating": 4.2,
-    "review_count": 0,
-    "retailer": "Amazon.com (2024 archive)",
-    "product_url": "https://www.amazon.com/dp/B099NK8PT5",
-    "image_url": "https://m.media-amazon.com/images/I/61n-nh7se5L._AC_UL320_.jpg",
-    "description": "1920s-style men's costume accessory set including gangster spats, suspenders, trouser braces and a white tie for themed events.",
-    "attributes": {
-      "gender": "men",
-      "season": [
-        "all-season"
-      ],
-      "use_case": [
-        "party",
-        "festive"
-      ],
-      "occasion": [
-        "party",
-        "festive"
-      ],
-      "material": null,
-      "temp_rating_c": null,
-      "is_giftable": true
     },
     "in_stock": true,
     "link_status": "archival",

@@ -143,7 +143,7 @@ language. See [ai-approach.md](ai-approach.md).
 
 ## Product Catalogue
 
-The app ships with a committed catalogue of 1,738 real products from Amazon.in,
+The app ships with a committed catalogue of 1,725 real products from Amazon.in,
 Myntra and a Kaggle Amazon-fashion archive, with product URLs, images, prices,
 ratings and enriched shopping attributes.
 

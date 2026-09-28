@@ -95,7 +95,7 @@ Every response includes `meta`:
   "llm_calls": 1,
   "cached": false,
   "degraded_mode": false,
-  "catalogue_size": 1738,
+  "catalogue_size": 1725,
   "notes": []
 }
 ```

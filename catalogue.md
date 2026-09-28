@@ -1,13 +1,19 @@
 # Product Catalogue
 
-The app uses a committed catalogue of 1,738 real, purchasable products:
+The app uses a committed catalogue of 1,725 real, purchasable products:
 
 - 156 products from Amazon.in
 - 133 products from Myntra
-- 1,449 products from a Kaggle Amazon-fashion archive (archival: US-priced at a
+- 1,436 products from a Kaggle Amazon-fashion archive (archival: US-priced at a
   fixed conversion rate, dated Feb 2024, never live-verified -- see
   `link_status` below and [scope.md](scope.md))
 - 56 populated subcategories, across 68 taxonomy paths total (12 still empty)
+
+On 2026-09-28 a rule-based audit of archival records re-shelved 6 mis-filed
+products (stockings filed as trousers, shorts as formal shirts, and similar)
+and removed 13 that match no taxonomy path at all -- belts filed under
+Jewellery, cosplay and costume accessories, a tap-dance shoe filed as a formal
+shoe, and a sobriety keepsake card.
 
 The built catalogue lives in `backend/data/products.json`, with embeddings in
 `backend/data/embeddings.npy` and taxonomy metadata in

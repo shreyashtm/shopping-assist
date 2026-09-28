@@ -1,5 +1,5 @@
 {
-  "product_count": 1738,
+  "product_count": 1725,
   "min_viable": 4,
   "categories": {
     "Men's Apparel": {
@@ -12,7 +12,7 @@
         "viable": true
       },
       "Formal Shirts": {
-        "count": 38,
+        "count": 37,
         "price_range": [
           1295,
           7989
@@ -44,9 +44,9 @@
         "viable": true
       },
       "Suits & Blazers": {
-        "count": 79,
+        "count": 78,
         "price_range": [
-          1493,
+          2320,
           12487
         ],
         "viable": true
@@ -76,7 +76,7 @@
         "viable": true
       },
       "Shorts": {
-        "count": 63,
+        "count": 64,
         "price_range": [
           813,
           9130
@@ -118,7 +118,7 @@
         "viable": true
       },
       "Trousers": {
-        "count": 16,
+        "count": 15,
         "price_range": [
           1244,
           6639
@@ -150,7 +150,7 @@
         "viable": true
       },
       "Socks & Hosiery": {
-        "count": 10,
+        "count": 11,
         "price_range": [
           399,
           2071
@@ -210,7 +210,7 @@
     },
     "Footwear": {
       "Formal Shoes": {
-        "count": 19,
+        "count": 18,
         "price_range": [
           2240,
           11620
@@ -218,7 +218,7 @@
         "viable": true
       },
       "Casual Sneakers": {
-        "count": 82,
+        "count": 80,
         "price_range": [
           995,
           14027
@@ -242,7 +242,7 @@
         "viable": true
       },
       "Sandals & Floaters": {
-        "count": 62,
+        "count": 64,
         "price_range": [
           1069,
           11620
@@ -304,7 +304,7 @@
         "viable": true
       },
       "Wallets": {
-        "count": 73,
+        "count": 72,
         "price_range": [
           486,
           21995
@@ -322,10 +322,10 @@
         "viable": true
       },
       "Jewellery": {
-        "count": 35,
+        "count": 26,
         "price_range": [
           414,
-          3991
+          3067
         ],
         "viable": true
       }
@@ -366,10 +366,10 @@
     },
     "Sports & Fitness": {
       "Yoga": {
-        "count": 11,
+        "count": 10,
         "price_range": [
           203,
-          2489
+          599
         ],
         "viable": true
       },
@@ -386,7 +386,7 @@
         "viable": false
       },
       "Activewear": {
-        "count": 55,
+        "count": 56,
         "price_range": [
           945,
           5806
@@ -506,7 +506,7 @@
         "viable": true
       },
       "Keepsakes": {
-        "count": 26,
+        "count": 25,
         "price_range": [
           580,
           6722

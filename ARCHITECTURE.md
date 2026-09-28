@@ -283,7 +283,7 @@ startup:
 
 At the current size, this is simpler and faster than adding a database:
 
-- 1,738 products fit comfortably in process memory.
+- 1,725 products fit comfortably in process memory.
 - Vector scoring is a local NumPy operation.
 - The catalogue is read-only at runtime.
 - There is no second store to seed or keep in sync.
@@ -341,7 +341,7 @@ Every recommendation response includes operational metadata:
   "llm_calls": 1,
   "cached": false,
   "degraded_mode": false,
-  "catalogue_size": 1738,
+  "catalogue_size": 1725,
   "notes": []
 }
 ```
