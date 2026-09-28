@@ -87,6 +87,32 @@ export default function Home() {
       });
     }
 
+    await settle(request, id, patch, controller);
+  }
+
+  /**
+   * Drives one turn to its final state, re-running in place -- silently,
+   * within the same turn -- whenever a provisional answer turns out to match
+   * a real question.
+   *
+   * Previously a match closed the loading turn with `status: "done"` and
+   * opened a *second* one for the follow-up: an echoed chip, then a fresh
+   * loading state, then the real result. That read as two rounds of asking
+   * for something the shopper had already answered while waiting. Recursing
+   * here instead means the intermediate clarify response -- the one the tap
+   * already resolved -- is never shown at all. The turn stays in `loading`
+   * (stage updates keep animating through the second call too, so the wait
+   * still reads as progress) until there is nothing left to auto-resolve,
+   * and only *that* final state ever becomes visible. Bounded by
+   * construction: provisional answers exist only on the first call and are
+   * consumed before recursing, so a second match is never possible.
+   */
+  async function settle(
+    request: RecommendRequest,
+    id: string,
+    patch: (update: Partial<AssistantTurn>) => void,
+    controller: AbortController,
+  ) {
     try {
       const result = await recommendStreaming(
         request,
@@ -94,33 +120,27 @@ export default function Home() {
         controller.signal,
       );
 
-      // Read before clearing: this is the one synchronous point where "what
-      // did the shopper tap while we were loading" still matters.
       const tapped = provisionalAnswersRef.current.get(id) ?? {};
       const matched = matchedProvisionalAnswers(tapped, result.questions);
-      provisionalAnswersRef.current.delete(id);
 
+      if (result.mode === "clarify" && matched.length > 0) {
+        provisionalAnswersRef.current.set(id, {});
+        await settle(
+          { query: request.query, answers: [...(request.answers ?? []), ...matched] },
+          id,
+          patch,
+          controller,
+        );
+        return;
+      }
+
+      provisionalAnswersRef.current.delete(id);
       patch({
         status: "done",
         response: result,
         stage: null,
         provisionalQuestions: null,
       });
-
-      if (result.mode === "clarify" && matched.length > 0) {
-        // The shopper already answered while waiting, and it turned out to
-        // be one of the real questions -- continue immediately rather than
-        // making them notice the (now-redundant) question and tap again.
-        const label = describeAnswers(result, matched);
-        setTurns((prev) => [
-          ...prev,
-          { kind: "user", id: newId(), text: label, origin: "chip" },
-        ]);
-        void run({
-          query: request.query,
-          answers: [...(request.answers ?? []), ...matched],
-        });
-      }
     } catch (err) {
       provisionalAnswersRef.current.delete(id);
       if (err instanceof DOMException && err.name === "AbortError") {

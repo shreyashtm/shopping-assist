@@ -48,11 +48,16 @@ export function AssistantTurnView({
   onAnswerProvisional,
 }: Props) {
   if (turn.status === "loading") {
+    // Provisional questions render first, above the stage list and skeleton
+    // cards -- not after them. They used to sit below four skeleton cards'
+    // worth of height, which meant the one thing actually worth interacting
+    // with during the wait was the one thing reliably scrolled out of view.
+    // They also stay mounted through a silent background re-run (see
+    // `settle` in page.tsx): status stays "loading" while a matched answer
+    // is applied, so a shopper who keeps tapping mid-reconciliation is still
+    // heard.
     return (
       <div className="space-y-6">
-        <div className="border-l-2 border-accent pl-4 sm:pl-5">
-          <ThinkingState stage={turn.stage} />
-        </div>
         {turn.provisionalQuestions && turn.provisionalQuestions.length > 0 && (
           <ProvisionalQuestions
             questions={turn.provisionalQuestions}
@@ -60,6 +65,9 @@ export function AssistantTurnView({
             onAnswer={(slot, value) => onAnswerProvisional(turn.id, slot, value)}
           />
         )}
+        <div className="border-l-2 border-accent pl-4 sm:pl-5">
+          <ThinkingState stage={turn.stage} />
+        </div>
       </div>
     );
   }
