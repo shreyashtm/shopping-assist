@@ -60,15 +60,38 @@ _ROUTES: list[tuple[tuple[str, ...], str, list[str], str]] = [
         ],
         "premium gift set",
     ),
+    # Clothing is split by garment. One "Clothing" route searching every shelf
+    # with "casual everyday clothing" answered "a warm jacket" with casual
+    # shirts, because the phrase, not the request, decided the ranking.
     (
-        ("shirt", "tshirt", "t-shirt", "top", "jacket", "jeans", "trouser"),
-        "Clothing",
-        [
-            "Men's Apparel/Casual Shirts", "Men's Apparel/T-Shirts",
-            "Men's Apparel/Jackets & Coats", "Men's Apparel/Trousers & Chinos",
-            "Women's Apparel/Tops & T-Shirts", "Women's Apparel/Jeans",
-        ],
-        "casual everyday clothing",
+        ("jacket", "coat", "parka", "puffer"),
+        "Jackets",
+        ["Men's Apparel/Jackets & Coats", "Women's Apparel/Jackets & Coats"],
+        "jacket",
+    ),
+    (
+        ("t-shirt", "tshirt", "tee", "top"),
+        "T-Shirts & Tops",
+        ["Men's Apparel/T-Shirts", "Women's Apparel/Tops & T-Shirts"],
+        "t-shirt",
+    ),
+    (
+        ("shirt",),
+        "Shirts",
+        ["Men's Apparel/Casual Shirts", "Men's Apparel/Formal Shirts"],
+        "shirt",
+    ),
+    (
+        ("jeans", "denim"),
+        "Jeans",
+        ["Men's Apparel/Jeans", "Women's Apparel/Jeans"],
+        "jeans",
+    ),
+    (
+        ("trouser", "pant", "chino"),
+        "Trousers",
+        ["Men's Apparel/Trousers & Chinos", "Women's Apparel/Trousers"],
+        "trousers",
     ),
     (
         ("shoe", "sneaker", "footwear", "boot", "sandal"),
@@ -162,43 +185,107 @@ _MODIFIER_PHRASES = (
 )
 
 
+_CLAUSE_SPLIT = re.compile(r",|;|\band\b|\bwith\b|\bplus\b|\balso\b")
+_LEADING_FILLER = re.compile(
+    r"^\s*(i\s+(really\s+)?(need|want|would like|am looking for)|looking for|need|want"
+    r"|get me|find me|show me|suggest)\s+"
+)
+_EDGE_STOPWORDS = {"for", "my", "to", "the", "in", "of", "on", "some", "me", "i", "your"}
+_ARTICLES = {"a", "an", "the", "some"}
+
+
+def _claim(text: str, pattern: str) -> str:
+    """Blank out matches with same-length spaces, so offsets stay aligned."""
+    return re.sub(pattern, lambda m: " " * len(m.group()), text)
+
+
+def _what_was_asked(text: str, start: int) -> str:
+    """The shopper's own words around a keyword match: "a warm jacket".
+
+    Taken from the clause holding the match, a few words either side, so a
+    group is searched and titled by what was asked for it -- not by the whole
+    request, which pulled every group toward every item mentioned.
+    """
+    clause_start = 0
+    for sep in _CLAUSE_SPLIT.finditer(text):
+        if sep.start() >= start:
+            clause_end = sep.start()
+            break
+        clause_start = sep.end()
+    else:
+        clause_end = len(text)
+    before = _LEADING_FILLER.sub("", text[clause_start:start]).split()[-3:]
+    after = text[start:clause_end].split()[:3]
+    words = [w.strip(".!?'\"()") for w in before + after]
+    while words and words[-1] in _EDGE_STOPWORDS | _ARTICLES:
+        words.pop()
+    while words and words[0] in _EDGE_STOPWORDS:
+        words.pop(0)
+    return " ".join(w for w in words if w)
+
+
 def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
     text = query.lower()
     buckets: list[Bucket] = []
     categories: list[str] = []
 
-    # A multi-word keyword claims its words, so "fitness band" routes to
-    # Electronics without its "fitness" also opening a dumbbell group, and
-    # "sleeping bag" to trekking without "bag" opening a backpack group.
+    # A keyword containing a space or hyphen claims its words first, so
+    # "fitness band" routes to Electronics without its "fitness" also opening
+    # a dumbbell group, "sleeping bag" to trekking without "bag" opening a
+    # backpack group, and "t-shirt" without its "shirt" opening Shirts.
     # Modifier phrases are claimed by no route at all: "top rated" and
     # "top quality" describe a product, they do not ask for a top.
     single_word_text = text
     for phrase in _MODIFIER_PHRASES:
-        single_word_text = re.sub(rf"\b{re.escape(phrase)}\b", " ", single_word_text)
+        single_word_text = _claim(single_word_text, rf"\b{re.escape(phrase)}\b")
     for keywords, *_ in _ROUTES:
         for word in keywords:
-            if " " in word:
-                single_word_text = re.sub(rf"\b{re.escape(word)}", " ", single_word_text)
+            if " " in word or "-" in word:
+                single_word_text = _claim(single_word_text, rf"\b{re.escape(word)}")
 
+    matched = []
     for keywords, bucket_name, paths, phrase in _ROUTES:
         # Word-start match, not substring: "top" must not fire inside
         # "laptop", while "bag" still matches "bags" and "camp" "camping".
-        if any(
-            re.search(rf"\b{re.escape(word)}", text if " " in word else single_word_text)
+        starts = [
+            m.start()
             for word in keywords
-        ):
-            if bucket_name in {b.name for b in buckets}:
-                continue
-            categories.extend(p.split("/")[0] for p in paths)
-            buckets.append(
-                Bucket(
-                    name=bucket_name,
-                    search_phrases=[phrase, query],
-                    why_needed=f"Matched on your mention of {bucket_name.lower()}.",
-                    role="recommended",
-                    catalogue_paths=paths,
-                )
+            for m in [re.search(
+                rf"\b{re.escape(word)}",
+                text if (" " in word or "-" in word) else single_word_text,
+            )]
+            if m
+        ]
+        if starts:
+            matched.append((min(starts), bucket_name, paths, phrase))
+
+    # A broad route gives up shelves a narrower matched route covers: asked for
+    # "trekking gear" and "a warm jacket", jackets belong in Jackets, and
+    # trekking gear should show the thermals and camp kit nobody named.
+    narrowed = []
+    for start, bucket_name, paths, phrase in matched:
+        claimed = {
+            p for _, other, other_paths, _ in matched
+            if other != bucket_name and len(other_paths) < len(paths)
+            for p in other_paths
+        }
+        kept = [p for p in paths if p not in claimed]
+        narrowed.append((start, bucket_name, kept or paths, phrase))
+
+    # In the order the shopper asked, not the order of this table.
+    for start, bucket_name, paths, phrase in sorted(narrowed, key=lambda m: m[0]):
+        asked = _what_was_asked(text, start)
+        search = " ".join(w for w in asked.split() if w not in _ARTICLES) or phrase
+        categories.extend(p.split("/")[0] for p in paths)
+        buckets.append(
+            Bucket(
+                name=bucket_name,
+                search_phrases=list(dict.fromkeys([phrase, search])),
+                why_needed=f"You asked for {asked or phrase}.",
+                role="recommended",
+                catalogue_paths=paths,
             )
+        )
 
     if not buckets:
         buckets = [
