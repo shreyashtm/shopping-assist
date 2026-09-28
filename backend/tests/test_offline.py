@@ -27,3 +27,31 @@ def test_keyword_still_matches_its_plural_and_longer_forms():
 
 def test_multi_word_keyword_still_matches():
     assert "Personal Care" in _bucket_names("a gentle face wash")
+
+
+# Found by a 26-input keyword-mode battery: whole-word collisions and a
+# missing keyword, not substring matches.
+
+
+def test_home_as_a_modifier_does_not_route_to_kitchen():
+    assert "Home & Kitchen" not in _bucket_names("desktop stand for my home office")
+    assert _bucket_names("home workout dumbbells and a yoga mat") == ["Fitness Gear"]
+
+
+def test_kitchen_requests_still_route_to_home_and_kitchen():
+    assert _bucket_names("mixer grinder and cookware for my new kitchen") == ["Home & Kitchen"]
+
+
+def test_a_multi_word_keyword_claims_its_words():
+    """"fitness band" is a wearable; its "fitness" must not also open a
+    dumbbell group."""
+    assert _bucket_names("wireless headphones and a fitness band") == ["Electronics"]
+
+
+def test_wallet_gets_its_own_route():
+    names = _bucket_names("a watch and a wallet and a belt for my dad")
+    assert names == ["Watches", "Wallets"]
+
+
+def test_home_appliances_still_route_without_the_bare_home_keyword():
+    assert _bucket_names("some home appliances") == ["Home & Kitchen"]

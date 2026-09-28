@@ -260,3 +260,17 @@ def test_unset_client_filters_do_not_erase_inferred_ones():
 def test_absent_filters_block_is_a_no_op():
     inferred = QueryFilters(price_max=2000)
     assert _with_overrides(inferred, None) is inferred
+
+
+def test_outage_fallback_shows_wallets_for_a_wallet_request(catalogue):
+    """Routing alone is not enough: the group must contain wallets, not the
+    backpacks a generic Bags search ranks first."""
+    response = recommend(
+        RecommendRequest(query="a watch and a wallet for my dad", skip_clarification=True),
+        catalogue,
+        DeadProvider(),
+        today=TODAY,
+    )
+    wallets = next(g for g in response.groups if g.name == "Wallets")
+    assert wallets.items
+    assert all(i.product.subcategory == "Wallets" for i in wallets.items)

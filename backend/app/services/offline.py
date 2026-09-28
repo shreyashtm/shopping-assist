@@ -80,6 +80,9 @@ _ROUTES: list[tuple[tuple[str, ...], str, list[str], str]] = [
         "shoes",
     ),
     (("watch",), "Watches", ["Watches & Jewellery/Watches"], "wrist watch"),
+    # Its own route rather than part of Bags: Bags searches with the phrase
+    # "backpack", which ranked backpacks above every wallet for "a wallet".
+    (("wallet",), "Wallets", ["Bags & Luggage/Wallets"], "leather wallet"),
     (
         ("gym", "workout", "fitness", "yoga", "dumbbell", "exercise"),
         "Fitness Gear",
@@ -87,7 +90,9 @@ _ROUTES: list[tuple[tuple[str, ...], str, list[str], str]] = [
         "home workout equipment",
     ),
     (
-        ("kitchen", "cookware", "bedsheet", "home", "mixer"),
+        # No bare "home": it is a modifier far more often than a request
+        # ("home office", "home workout"), and routed those to mixer grinders.
+        ("kitchen", "cookware", "bedsheet", "mixer", "appliance"),
         "Home & Kitchen",
         [
             "Home & Kitchen/Cookware", "Home & Kitchen/Appliances",
@@ -155,10 +160,21 @@ def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
     buckets: list[Bucket] = []
     categories: list[str] = []
 
+    # A multi-word keyword claims its words, so "fitness band" routes to
+    # Electronics without its "fitness" also opening a dumbbell group.
+    single_word_text = text
+    for keywords, *_ in _ROUTES:
+        for word in keywords:
+            if " " in word:
+                single_word_text = re.sub(rf"\b{re.escape(word)}", " ", single_word_text)
+
     for keywords, bucket_name, paths, phrase in _ROUTES:
         # Word-start match, not substring: "top" must not fire inside
         # "laptop", while "bag" still matches "bags" and "camp" "camping".
-        if any(re.search(rf"\b{re.escape(word)}", text) for word in keywords):
+        if any(
+            re.search(rf"\b{re.escape(word)}", text if " " in word else single_word_text)
+            for word in keywords
+        ):
             if bucket_name in {b.name for b in buckets}:
                 continue
             categories.extend(p.split("/")[0] for p in paths)
