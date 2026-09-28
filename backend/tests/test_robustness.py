@@ -274,3 +274,42 @@ def test_outage_fallback_shows_wallets_for_a_wallet_request(catalogue):
     wallets = next(g for g in response.groups if g.name == "Wallets")
     assert wallets.items
     assert all(i.product.subcategory == "Wallets" for i in wallets.items)
+
+
+class _CannedProvider:
+    """Returns one fixed payload: a model that answered, but badly."""
+
+    name = "canned"
+    is_real = True
+
+    def __init__(self, payload):
+        self._payload = payload
+
+    def structured(self, **_):
+        return self._payload
+
+
+def test_a_wrong_shape_plan_degrades_instead_of_erroring(catalogue):
+    response = recommend(
+        RecommendRequest(query="laptop backpack for office", skip_clarification=True),
+        catalogue,
+        _CannedProvider({"intent_summary": "x", "buckets": "not a list"}),
+        today=TODAY,
+    )
+    assert response.meta.degraded_mode is True
+    assert [g.name for g in response.groups] == ["Bags"]
+
+
+def test_a_model_decline_with_no_buckets_is_answered_politely(catalogue):
+    response = recommend(
+        RecommendRequest(query="what is the capital of France", skip_clarification=True),
+        catalogue,
+        _CannedProvider({
+            "intent_summary": "Geography question.", "is_shopping_request": False,
+            "buckets": [], "filters": {}, "context": {}, "assumptions": [],
+        }),
+        today=TODAY,
+    )
+    assert response.meta.degraded_mode is False
+    assert response.groups == []
+    assert "doesn't look like a shopping request" in response.intent_summary

@@ -264,3 +264,56 @@ def test_non_occasion_values_pass_through_untouched():
 
     for value in ("gender:men", "price_max:500", "start_date:2026-10-25", "use_case:trekking"):
         assert canonical_answer_value(value) == value
+
+
+# --- plans that are valid JSON but not a valid plan -----------------------
+#
+# Found by a scripted situation matrix: each of these reached the shopper as
+# HTTP 500 "Internal server error". Free OpenRouter models do not enforce the
+# response schema, so parseable-but-wrong output is a live failure mode.
+
+import pytest  # noqa: E402
+
+from app.adapters.llm.base import LLMUnavailable  # noqa: E402
+
+
+def test_a_wrong_shape_plan_is_a_model_failure_not_a_crash():
+    """Raised as LLMUnavailable so recommend() degrades to keyword matching,
+    exactly as it already does for unparseable JSON."""
+    provider = _FixedProvider({**_BASE_PAYLOAD, "buckets": "not a list"})
+    with pytest.raises(LLMUnavailable):
+        interpret(provider, "any-model", "a jacket", date(2026, 8, 25))
+
+
+def test_a_shopping_plan_with_no_buckets_is_still_rejected():
+    provider = _FixedProvider({**_BASE_PAYLOAD, "buckets": []})
+    with pytest.raises(LLMUnavailable):
+        interpret(provider, "any-model", "a jacket", date(2026, 8, 25))
+
+
+def test_a_declined_request_may_have_no_buckets():
+    """The prompt tells the model to set is_shopping_request=false for
+    off-topic input; the natural way to do that has no buckets at all."""
+    payload = {**_BASE_PAYLOAD, "is_shopping_request": False, "buckets": []}
+    structured = interpret(_FixedProvider(payload), "any-model", "capital of France", date(2026, 8, 25))
+    assert structured.is_shopping_request is False
+    assert structured.buckets == []
+
+
+def test_buckets_sharing_a_name_are_merged():
+    """Two "Shoes" buckets rendered as two identically named groups sharing
+    products, and the frontend keys groups by name."""
+    running = {**_BASE_PAYLOAD["buckets"][0], "name": "Shoes", "role": "recommended",
+               "search_phrases": ["running shoes"], "catalogue_paths": ["Footwear/Sports Shoes"]}
+    hiking = {**_BASE_PAYLOAD["buckets"][0], "name": " shoes ", "role": "required",
+              "search_phrases": ["hiking boots", "running shoes"], "catalogue_paths": ["Footwear/Boots"]}
+    structured = interpret(
+        _FixedProvider({**_BASE_PAYLOAD, "buckets": [running, hiking]}),
+        "any-model", "shoes", date(2026, 8, 25),
+    )
+    assert len(structured.buckets) == 1
+    merged = structured.buckets[0]
+    assert merged.name == "Shoes"
+    assert merged.search_phrases == ["running shoes", "hiking boots"]
+    assert merged.catalogue_paths == ["Footwear/Sports Shoes", "Footwear/Boots"]
+    assert merged.role == "required"

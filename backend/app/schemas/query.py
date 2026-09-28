@@ -9,7 +9,7 @@ without an LLM, and the LLM can be swapped or stubbed without touching search.
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.schemas.product import Formality, WaterResistance
 
@@ -255,7 +255,11 @@ class ClarifyingQuestion(BaseModel):
 
 class StructuredQuery(BaseModel):
     intent_summary: str = Field(description="One sentence restating the need, for UI echo.")
-    buckets: list[Bucket] = Field(min_length=1)
+    # Empty only when declining: the prompt tells the model to set
+    # is_shopping_request=false for off-topic input, and the natural way to
+    # do that has no buckets. A hard min_length=1 turned every such decline
+    # into an HTTP 500. See _shopping_needs_a_bucket below.
+    buckets: list[Bucket] = Field(default_factory=list)
     filters: QueryFilters = Field(default_factory=QueryFilters)
     context: ResolvedContext = Field(default_factory=ResolvedContext)
 
@@ -296,6 +300,12 @@ class StructuredQuery(BaseModel):
         default=True,
         description="False for off-topic input, so the API can decline without inventing results.",
     )
+
+    @model_validator(mode="after")
+    def _shopping_needs_a_bucket(self) -> "StructuredQuery":
+        if self.is_shopping_request and not self.buckets:
+            raise ValueError("a shopping request needs at least one bucket")
+        return self
 
 
 class ContextConstraints(BaseModel):

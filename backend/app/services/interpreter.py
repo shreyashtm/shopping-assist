@@ -22,7 +22,9 @@ import logging
 from datetime import date, timedelta
 from typing import Any
 
-from app.adapters.llm.base import LLMProvider
+from pydantic import ValidationError
+
+from app.adapters.llm.base import LLMProvider, LLMUnavailable
 from app.schemas.query import StructuredQuery
 from app.services.taxonomy import OCCASIONS
 
@@ -417,6 +419,34 @@ def build_user_prompt(
     return "\n".join(parts)
 
 
+_ROLE_RANK = {"required": 0, "recommended": 1, "optional": 2}
+
+
+def _merge_same_name_buckets(buckets: list) -> list:
+    """Fold buckets the model gave the same name into one.
+
+    Group names are the identity downstream -- cross-bucket dedupe and the
+    frontend's list keys both use them -- so two "Shoes" buckets rendered as
+    two identical headings sharing products. Merging keeps both sub-needs:
+    phrases and paths are unioned in order, and the more important role wins.
+    """
+    merged: dict[str, Any] = {}
+    for bucket in buckets:
+        key = bucket.name.strip().lower()
+        first = merged.get(key)
+        if first is None:
+            merged[key] = bucket.model_copy(update={"name": bucket.name.strip()})
+            continue
+        merged[key] = first.model_copy(update={
+            "search_phrases": list(dict.fromkeys([*first.search_phrases, *bucket.search_phrases])),
+            "catalogue_paths": list(dict.fromkeys([*first.catalogue_paths, *bucket.catalogue_paths])),
+            "role": min(first.role, bucket.role, key=_ROLE_RANK.__getitem__),
+            "priority": min(first.priority, bucket.priority),
+            "max_items": max(first.max_items, bucket.max_items),
+        })
+    return list(merged.values())
+
+
 def interpret(
     provider: LLMProvider,
     model: str,
@@ -437,7 +467,18 @@ def interpret(
         timeout_s=timeout_s,
         effort=effort,
     )
-    structured = StructuredQuery.model_validate(payload)
+    # Valid JSON is not necessarily a valid plan: free models routed through
+    # OpenRouter do not enforce the response schema, and a wrong shape used to
+    # escape as an HTTP 500. It is a model failure like any other, so it
+    # surfaces as LLMUnavailable and the request degrades to keyword matching.
+    try:
+        structured = StructuredQuery.model_validate(payload)
+    except ValidationError as exc:
+        raise LLMUnavailable(
+            f"{model} returned a plan that failed validation "
+            f"({exc.error_count()} error(s))"
+        ) from exc
+    structured.buckets = _merge_same_name_buckets(structured.buckets)
 
     # The model can emit a natural-language gender word ("neutral") that
     # ProductAttributes.gender's canonical enum does not recognize -- fuzzing
