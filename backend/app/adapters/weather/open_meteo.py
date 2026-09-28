@@ -65,6 +65,17 @@ class Place:
     country: str | None
     admin1: str | None
     population: int | None
+    # (south, north, west, east) when the gazetteer reports one. Nominatim does
+    # for every hit; Open-Meteo's settlement list does not.
+    bbox: tuple[float, float, float, float] | None = None
+
+    @property
+    def extent_deg(self) -> float | None:
+        """The larger side of the bounding box, in degrees."""
+        if self.bbox is None:
+            return None
+        south, north, west, east = self.bbox
+        return max(north - south, east - west)
 
     @property
     def display(self) -> str:

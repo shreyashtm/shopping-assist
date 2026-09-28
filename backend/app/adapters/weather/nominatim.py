@@ -74,6 +74,11 @@ class NominatimClient:
             except (KeyError, TypeError, ValueError):
                 continue
             address = entry.get("address") or {}
+            try:
+                bbox = tuple(float(v) for v in entry["boundingbox"])
+                bbox = bbox if len(bbox) == 4 else None
+            except (KeyError, TypeError, ValueError):
+                bbox = None
             places.append(
                 Place(
                     name=entry.get("name") or name,
@@ -83,6 +88,7 @@ class NominatimClient:
                     country=address.get("country"),
                     admin1=address.get("state"),
                     population=None,
+                    bbox=bbox,
                 )
             )
         return places

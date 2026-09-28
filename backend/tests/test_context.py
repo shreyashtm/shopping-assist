@@ -236,6 +236,7 @@ def _nominatim(name, lat, lon, state, country):
 
 def _resolve(place, transport, lat=None, lon=None):
     context_module._place_cache.clear()
+    context_module._miss_cache.clear()
     ctx = ResolvedContext(location=place, start_date=date(2026, 12, 20), end_date=date(2026, 12, 27))
     client = OpenMeteoClient(transport=transport)
     places = NominatimClient(transport=transport)
@@ -305,3 +306,91 @@ def test_place_display_does_not_repeat_a_region_named_after_its_state():
     from app.adapters.weather.open_meteo import Place
     assert Place("Goa", 15.3, 74.1, None, "India", "Goa", None).display == "Goa, India"
     assert Place("Manali", 32.2, 77.2, None, "India", "Himachal Pradesh", None).display == "Manali, Himachal Pradesh, India"
+
+
+# --- areas are not points -----------------------------------------------------
+#
+# Live on 2026-09-28, after switching to Nominatim: "Europe" resolved to one
+# point (-1.4..7.8C), "India" to 4.8..23.5C, "Himachal Pradesh" to a single
+# reading although Shimla and Spiti differ by 20C. Nominatim reports each hit's
+# bounding box; an area wider than a climate reading can represent needs a
+# point from the model, or it is unobtainable.
+
+
+def _area(name, lat, lon, state, country, south, north, west, east):
+    row = _nominatim(name, lat, lon, state, country)
+    row["boundingbox"] = [str(south), str(north), str(west), str(east)]
+    return row
+
+
+LADAKH = _area("Ladakh", 33.95, 77.66, "Ladakh", "India", 32.3, 35.6, 75.3, 79.4)
+
+
+def test_a_broad_area_without_a_model_point_is_unobtainable(no_throttle):
+    assert _resolve("Ladakh", _GazetteerTransport(ranked=[LADAKH])).source == "unobtainable"
+
+
+def test_a_broad_area_uses_the_model_point_inside_it(no_throttle):
+    """Model says Ladakh at Leh's coordinates: measure Leh, not the centroid."""
+    climate = _resolve("Ladakh", _GazetteerTransport(ranked=[LADAKH]), lat=34.16, lon=77.58)
+    assert climate.source != "unobtainable"
+    assert (climate.latitude, climate.longitude) == (34.16, 77.58)
+    assert climate.place_resolved.startswith("Ladakh")
+
+
+def test_a_model_point_outside_the_area_is_not_trusted(no_throttle):
+    """Near enough to select Ladakh (189 km from its centre) but south of its
+    bounding box: the point contradicts the area it claims to be in."""
+    climate = _resolve("Ladakh", _GazetteerTransport(ranked=[LADAKH]), lat=32.25, lon=77.66)
+    assert climate.source == "unobtainable"
+
+
+def test_a_small_area_is_still_a_point(no_throttle):
+    goa = _area("Goa", 15.3, 74.08, "Goa", "India", 14.9, 15.8, 73.7, 74.3)
+    assert _resolve("Goa", _GazetteerTransport(ranked=[goa])).place_resolved == "Goa, India"
+
+
+class _CountingTransport(_GazetteerTransport):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.nominatim_calls = 0
+
+    def handle_request(self, request):
+        if "nominatim" in str(request.url):
+            self.nominatim_calls += 1
+        return super().handle_request(request)
+
+
+def test_a_name_the_gazetteer_does_not_know_is_not_looked_up_again(no_throttle):
+    transport = _CountingTransport(ranked=[])
+    context_module._miss_cache.clear()
+    assert _resolve("Qwxzplorbia", transport).source == "unobtainable"
+    ctx = ResolvedContext(location="Qwxzplorbia", start_date=date(2026, 12, 20), end_date=date(2026, 12, 27))
+    client, places = OpenMeteoClient(transport=transport), NominatimClient(transport=transport)
+    try:
+        resolve_climate(ctx, client, date(2026, 9, 28), places=places)
+    finally:
+        client.close(); places.close()
+    assert transport.nominatim_calls == 1
+
+
+def test_a_failed_lookup_is_not_cached_as_a_miss(no_throttle):
+    """Nominatim down and Open-Meteo empty: nothing was learned, so ask again."""
+    transport = _CountingTransport(nominatim_down=True)
+    _resolve("Leh", transport)  # clears both caches first
+    ctx = ResolvedContext(location="Leh", start_date=date(2026, 12, 20), end_date=date(2026, 12, 27))
+    client, places = OpenMeteoClient(transport=transport), NominatimClient(transport=transport)
+    try:
+        resolve_climate(ctx, client, date(2026, 9, 28), places=places)
+    finally:
+        client.close(); places.close()
+    assert transport.nominatim_calls == 2
+
+
+def test_a_district_ranked_first_resolves_to_its_namesake_town(no_throttle):
+    """Live: Nominatim ranks Leh district (3.3 degrees) above Leh town."""
+    district = _area("Leh", 34.0, 77.66, "Ladakh", "India", 32.3, 35.6, 75.3, 79.4)
+    town = _area("Leh", 34.16, 77.58, "Ladakh", "India", 34.0, 34.32, 77.4, 77.72)
+    swiss = _area("Leh", 47.47, 9.26, "St. Gallen", "Switzerland", 47.45, 47.49, 9.24, 9.28)
+    climate = _resolve("Leh", _GazetteerTransport(ranked=[district, town, swiss]))
+    assert (climate.latitude, climate.longitude) == (34.16, 77.58)

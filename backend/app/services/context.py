@@ -78,6 +78,19 @@ MAX_GEOCODE_MATCH_KM = 200.0
 # and a climatology does not move fast enough to matter within one.
 _place_cache = ResponseCache(ttl_seconds=60 * 60 * 24 * 30, max_entries=512)
 _weather_cache = ResponseCache(ttl_seconds=60 * 60 * 24, max_entries=512)
+# Names the gazetteer genuinely answered "nothing usable" for. Kept apart from
+# _place_cache and for a day, not a month: a miss is cheaper to be wrong about,
+# and Nominatim allows one request a second, so re-asking about the same
+# unknown name on every request is what this prevents. A failed lookup is
+# never stored here -- that is "we could not ask", not "there is nothing".
+_miss_cache = ResponseCache(ttl_seconds=60 * 60 * 24, max_entries=512)
+
+# How wide a gazetteer hit can be and still stand for one climate reading.
+# Goa (about 1 degree) is one reading; Himachal Pradesh (3 degrees) spans
+# Shimla and Spiti, 20C apart in December, and "Europe" or "India" are not a
+# place to measure at all. Past this, only a model-proposed point inside the
+# area is measured.
+MAX_POINT_EXTENT_DEG = 1.5
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -299,6 +312,35 @@ def resolve_climate(
     return climate.model_copy(update={"summary": render_summary(climate)})
 
 
+def _is_area(place: Place) -> bool:
+    return (place.extent_deg or 0) > MAX_POINT_EXTENT_DEG
+
+
+def _contains(area: Place, latitude: float, longitude: float) -> bool:
+    south, north, west, east = area.bbox
+    return south <= latitude <= north and west <= longitude <= east
+
+
+def _named_town_inside(area: Place, candidates: list[Place]) -> Place | None:
+    """The measurable place an area shares its name with, if it contains one.
+
+    A district is often ranked above the town it is named after -- Nominatim
+    gives "Leh" as Leh district (3.3 degrees wide), then Leh town inside it --
+    and that town is what the bare name means. Ladakh, Himachal Pradesh or
+    India contain no namesake, so they stay unmeasurable without a point.
+    """
+    return next(
+        (
+            c for c in candidates
+            if c is not area
+            and c.name.lower() == area.name.lower()
+            and not _is_area(c)
+            and _contains(area, c.latitude, c.longitude)
+        ),
+        None,
+    )
+
+
 def _locate(
     location: str | None,
     proposed_lat: float | None,
@@ -324,23 +366,55 @@ def _locate(
     cached = _place_cache.get(key)
     if cached is not None:
         return cached
+    if _miss_cache.get(key):
+        return None
 
     candidates: list[Place] = []
     ranked = False
+    lookup_failed = False  # "could not ask" -- never cached as a miss
     if location and places is not None:
         try:
             candidates = places.search(location)
             ranked = True
         except WeatherUnavailable as exc:
+            lookup_failed = True
             logger.info("Nominatim lookup of %r failed, trying Open-Meteo: %s", location, exc)
     if location and not ranked:
         try:
             candidates = client.geocode(location)
         except WeatherUnavailable as exc:
+            lookup_failed = True
             logger.info("Geocoding %r failed, falling back to proposal: %s", location, exc)
+
+    def miss() -> None:
+        if not lookup_failed:
+            _miss_cache.set(key, True)
 
     has_proposal = proposed_lat is not None and proposed_lon is not None
     chosen = pick_place(candidates, proposed_lat, proposed_lon) if (ranked or has_proposal) else None
+
+    if chosen is not None and _is_area(chosen):
+        # An area, not a place: its centroid's weather is nobody's trip.
+        if has_proposal:
+            # A model point inside the area, whose elevation checks out, says
+            # which part is meant.
+            if not _contains(chosen, proposed_lat, proposed_lon):
+                miss()
+                return None
+            measured = client.elevation(proposed_lat, proposed_lon)
+            if not elevation_agrees(measured, proposed_elevation_m):
+                miss()
+                return None
+            result = (proposed_lat, proposed_lon, measured, chosen.display)
+            _place_cache.set(key, result)
+            return result
+        town = _named_town_inside(chosen, candidates)
+        if town is None:
+            logger.info("%r is an area %.1f deg wide with no point in it", location, chosen.extent_deg)
+            miss()
+            return None
+        chosen = town
+
     if chosen is not None:
         elevation = chosen.elevation_m
         if elevation is None:
@@ -353,6 +427,7 @@ def _locate(
         return result
 
     if proposed_lat is None or proposed_lon is None:
+        miss()
         return None
 
     # No gazetteer entry. The proposal is all we have, so check it against the
@@ -363,6 +438,7 @@ def _locate(
             "Rejecting proposed coordinates for %r: estimated %sm, measured %.0fm",
             location, proposed_elevation_m, measured,
         )
+        miss()
         return None
 
     result = (proposed_lat, proposed_lon, measured, location or "the given coordinates")
