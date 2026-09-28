@@ -13,6 +13,7 @@ does not depend on the model happening to ask.
 
 from datetime import date, timedelta
 
+from app.core.formatting import indian_grouping
 from app.schemas.query import (
     ClarifyingQuestion,
     ContextVariable,
@@ -322,11 +323,11 @@ def build_context_variables(
 def _budget_label(structured: StructuredQuery) -> str:
     filters = structured.filters
     if filters.price_min and filters.price_max:
-        return f"₹{filters.price_min:,} – ₹{filters.price_max:,}"
+        return f"₹{indian_grouping(filters.price_min)} – ₹{indian_grouping(filters.price_max)}"
     if filters.price_max:
-        return f"Under ₹{filters.price_max:,}"
+        return f"Under ₹{indian_grouping(filters.price_max)}"
     if filters.price_min:
-        return f"₹{filters.price_min:,}+"
+        return f"₹{indian_grouping(filters.price_min)}+"
     return "Set"
 
 

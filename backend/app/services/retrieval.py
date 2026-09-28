@@ -42,6 +42,7 @@ they sit next to each other semantically and `temp_rating_c` breaks the tie.
 
 import numpy as np
 
+from app.core.formatting import indian_grouping
 from app.schemas.product import Product
 from app.schemas.query import Bucket, ContextConstraints, QueryFilters, ResolvedContext
 from app.services.catalogue import Catalogue
@@ -556,6 +557,7 @@ def score_product(
     context: ResolvedContext,
     constraints: ContextConstraints | None = None,
     filters: QueryFilters | None = None,
+    phrase_tokens: set[str] | None = None,
 ) -> ScoredProduct:
     """Fuse semantic similarity with attribute evidence.
 
@@ -575,7 +577,8 @@ def score_product(
     boost = 0.0
     evidence: list[tuple[int, str]] = []
 
-    phrase_tokens = _phrase_tokens(bucket)
+    if phrase_tokens is None:
+        phrase_tokens = _phrase_tokens(bucket)
 
     matched_use = _overlap(product.attributes.use_case, phrase_tokens)
     if matched_use:
@@ -674,7 +677,7 @@ def score_product(
         and product.price_inr <= filters.price_max
         and (not filters.price_min or product.price_inr >= filters.price_min)
     ):
-        evidence.append((EVIDENCE_BUDGET, f"within your ₹{filters.price_max:,} budget"))
+        evidence.append((EVIDENCE_BUDGET, f"within your ₹{indian_grouping(filters.price_max)} budget"))
 
     # Social proof, compressed hard: this should break ties between comparable
     # products, never lift a poor match above a good one.
@@ -688,7 +691,7 @@ def score_product(
                 (
                     EVIDENCE_POPULARITY,
                     f"{product.rating:.1f}★ from "
-                    f"{product.review_count:,} reviews",
+                    f"{indian_grouping(product.review_count)} reviews",
                 )
             )
 
@@ -750,6 +753,8 @@ def search_bucket(
         update={"categories": _relevant_categories(filters, bucket)}
     )
 
+    # Depends only on the bucket, so tokenise it once, not once per product.
+    phrase_tokens = _phrase_tokens(bucket)
     scored: list[ScoredProduct] = []
     for index, product in enumerate(catalogue.products):
         if not matches_paths(product, bucket.catalogue_paths):
@@ -768,6 +773,7 @@ def search_bucket(
                 context,
                 constraints,
                 filters=bucket_filters,
+                phrase_tokens=phrase_tokens,
             )
         )
 

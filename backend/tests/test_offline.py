@@ -55,3 +55,21 @@ def test_wallet_gets_its_own_route():
 
 def test_home_appliances_still_route_without_the_bare_home_keyword():
     assert _bucket_names("some home appliances") == ["Home & Kitchen"]
+
+
+# From the code review of today's routing fixes.
+
+
+def test_top_as_a_modifier_does_not_route_to_clothing():
+    assert _bucket_names("top rated laptop backpack for office") == ["Bags"]
+    assert _bucket_names("top quality running shoes") == ["Footwear"]
+    assert "Clothing" in _bucket_names("a top and jeans for college")
+
+
+def test_sleeping_bag_is_camping_gear_not_a_bag():
+    assert _bucket_names("a sleeping bag for camping") == ["Trekking Essentials"]
+
+
+def test_home_decor_still_routes_to_home_and_kitchen():
+    assert _bucket_names("home decor for my new flat") == ["Home & Kitchen"]
+    assert _bucket_names("home essentials for a new flat") == ["Home & Kitchen"]

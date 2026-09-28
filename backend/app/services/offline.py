@@ -26,7 +26,7 @@ from app.schemas.query import (
 # which would break the one guarantee this module exists to uphold.
 _ROUTES: list[tuple[tuple[str, ...], str, list[str], str]] = [
     (
-        ("trek", "hike", "hiking", "mountain", "camp", "trekking"),
+        ("trek", "hike", "hiking", "mountain", "camp", "trekking", "sleeping bag"),
         "Trekking Essentials",
         [
             "Men's Apparel/Jackets & Coats",
@@ -92,7 +92,8 @@ _ROUTES: list[tuple[tuple[str, ...], str, list[str], str]] = [
     (
         # No bare "home": it is a modifier far more often than a request
         # ("home office", "home workout"), and routed those to mixer grinders.
-        ("kitchen", "cookware", "bedsheet", "mixer", "appliance"),
+        ("kitchen", "cookware", "bedsheet", "mixer", "appliance", "home decor",
+         "home essentials"),
         "Home & Kitchen",
         [
             "Home & Kitchen/Cookware", "Home & Kitchen/Appliances",
@@ -155,14 +156,25 @@ _GENERIC_QUESTIONS = [
 ]
 
 
+_MODIFIER_PHRASES = (
+    "top rated", "top-rated", "top quality", "top-quality", "top brand", "top notch",
+    "top-notch", "top selling", "top-selling",
+)
+
+
 def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
     text = query.lower()
     buckets: list[Bucket] = []
     categories: list[str] = []
 
     # A multi-word keyword claims its words, so "fitness band" routes to
-    # Electronics without its "fitness" also opening a dumbbell group.
+    # Electronics without its "fitness" also opening a dumbbell group, and
+    # "sleeping bag" to trekking without "bag" opening a backpack group.
+    # Modifier phrases are claimed by no route at all: "top rated" and
+    # "top quality" describe a product, they do not ask for a top.
     single_word_text = text
+    for phrase in _MODIFIER_PHRASES:
+        single_word_text = re.sub(rf"\b{re.escape(phrase)}\b", " ", single_word_text)
     for keywords, *_ in _ROUTES:
         for word in keywords:
             if " " in word:

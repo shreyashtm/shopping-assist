@@ -130,8 +130,33 @@ export function ResultsView({ response }: { response: RecommendResponse }) {
                   {group.why_needed}
                 </p>
               </div>
-              {index < OPEN_GROUPS || expanded.has(group.name) ? (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {index >= OPEN_GROUPS && (
+                // Stays mounted while open so keyboard focus is not dropped
+                // when the cards appear, and so the group can be closed again.
+                <button
+                  type="button"
+                  aria-expanded={expanded.has(group.name)}
+                  aria-controls={`group-${index}-items`}
+                  onClick={() =>
+                    setExpanded((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(group.name)) next.delete(group.name);
+                      else next.add(group.name);
+                      return next;
+                    })
+                  }
+                  className="border border-border px-4 py-2 text-xs font-medium uppercase tracking-wide text-accent transition-colors hover:border-foreground"
+                >
+                  {expanded.has(group.name)
+                    ? "Hide picks"
+                    : `Show ${group.items.length} pick${group.items.length === 1 ? "" : "s"}`}
+                </button>
+              )}
+              {(index < OPEN_GROUPS || expanded.has(group.name)) && (
+                <div
+                  id={`group-${index}-items`}
+                  className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4"
+                >
                   {group.items.map((item, rank) => (
                     <ProductCard
                       key={item.product.id}
@@ -142,15 +167,6 @@ export function ResultsView({ response }: { response: RecommendResponse }) {
                     />
                   ))}
                 </div>
-              ) : (
-                <button
-                  type="button"
-                  aria-expanded={false}
-                  onClick={() => setExpanded((prev) => new Set(prev).add(group.name))}
-                  className="border border-border px-4 py-2 text-xs font-medium uppercase tracking-wide text-accent transition-colors hover:border-foreground"
-                >
-                  Show {group.items.length} pick{group.items.length === 1 ? "" : "s"}
-                </button>
               )}
             </div>
           ))}

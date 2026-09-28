@@ -143,11 +143,17 @@ describe("ResultsView", () => {
 
     const buttons = screen.getAllByRole("button", { name: "Show 2 picks" });
     expect(buttons).toHaveLength(2);
+    expect(buttons[0]).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(buttons[0]);
 
     expect(screen.getByText("Item 4.1")).toBeInTheDocument();
     expect(screen.queryByText("Item 5.1")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Show 2 picks" })).toHaveLength(1);
+    // The same button stays mounted (focus is not lost) and now closes the group.
+    expect(buttons[0]).toBeInTheDocument();
+    expect(buttons[0]).toHaveAttribute("aria-expanded", "true");
+    expect(buttons[0]).toHaveTextContent("Hide picks");
+    fireEvent.click(buttons[0]);
+    expect(screen.queryByText("Item 4.1")).not.toBeInTheDocument();
   });
 
   it("does not collapse anything for three groups or fewer", () => {
