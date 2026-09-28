@@ -299,6 +299,55 @@ def test_unverified_link_is_mildly_penalised():
     assert verified.score - blocked.score < 0.1
 
 
+def test_archival_is_penalised_well_beyond_blocked():
+    """An archival record was never live-checked; a blocked one only had its
+    final page check refused. At the old shared 0.02 archival items took the
+    top slots over comparable verified ones in 7 of 9 mixed-provenance buckets
+    on the real catalogue, so the two must no longer score alike.
+    """
+    verified = score_product(make_product("a", link_status="verified"), 0.5, TREK_BUCKET, COLD)
+    blocked = score_product(make_product("b", link_status="blocked"), 0.5, TREK_BUCKET, COLD)
+    archival = score_product(make_product("c", link_status="archival"), 0.5, TREK_BUCKET, COLD)
+    assert verified.score > blocked.score > archival.score
+    assert blocked.score - archival.score > 0.05
+
+
+def test_comparable_verified_product_outranks_a_slightly_closer_archival_one():
+    """When two products are nearly as relevant, the one whose link and price
+    were actually checked should be shown first."""
+    archival = score_product(make_product("arch", link_status="archival"), 0.60, TREK_BUCKET, MILD)
+    verified = score_product(make_product("ver", link_status="verified"), 0.55, TREK_BUCKET, MILD)
+    assert verified.score > archival.score
+
+
+def test_clearly_better_archival_product_still_outranks_a_weak_verified_one():
+    """The other side of the trade-off. At 0.15 a verified running shoe beat
+    archival formal shoes for an office request; provenance may break near
+    ties, but it must not override a clear relevance gap."""
+    archival = score_product(make_product("arch", link_status="archival"), 0.70, TREK_BUCKET, MILD)
+    verified = score_product(make_product("ver", link_status="verified"), 0.55, TREK_BUCKET, MILD)
+    assert archival.score > verified.score
+
+
+def test_archival_penalty_never_outweighs_a_thermal_mismatch():
+    """Archival is a statement about the listing, not about fit. A verified
+    product that is wrong for the conditions must still rank below a
+    type-correct archival one, or the penalty would bury relevance."""
+    hot = ResolvedContext(
+        climate=ClimateContext(source="measured", temp_min_c=24, temp_max_c=33)
+    )
+    archival_shell = score_product(
+        make_product("shell", link_status="archival"), 0.5, TREK_BUCKET, hot
+    )
+    verified_parka = score_product(
+        make_product("parka", link_status="verified", attributes={"temp_rating_c": -15}),
+        0.5,
+        TREK_BUCKET,
+        hot,
+    )
+    assert archival_shell.score > verified_parka.score
+
+
 # --- bucket search --------------------------------------------------------
 
 def test_search_bucket_respects_filters_and_limit():
@@ -900,3 +949,96 @@ def test_in_budget_still_beats_the_closest_below_budget_product():
     scored_under = score_product(just_under, 0.60, TREK_BUCKET, MILD, filters=filters)
 
     assert scored_in.score > scored_under.score
+
+
+# --- evidence matching: bucket wording vs closed tag vocabulary -------------
+#
+# 1,069 of 1,725 products carry use_case "daily-wear", but a bucket phrase is
+# free text: "daily wear t-shirt" tokenises to "daily" and "wear", so literal
+# matching never cited the most common tag. Measured on 30 representative
+# buckets against the real catalogue, 8.6% of shown cards fell back to the
+# generic "Closest match in ..." sentence and 25% cited only material or a
+# star rating; after this change those were 3.4% and 6.9%.
+
+
+def _bucket(*phrases: str, name: str = "Pick", why: str = "Asked for it.") -> Bucket:
+    return Bucket(
+        name=name,
+        search_phrases=list(phrases),
+        why_needed=why,
+        role="required",
+        catalogue_paths=["Men's Apparel/Jackets & Coats"],
+    )
+
+
+def test_daily_wear_phrasing_matches_the_daily_wear_tag():
+    product = make_product("tee", attributes={"use_case": ["daily-wear"]})
+    scored = score_product(product, 0.5, _bucket("comfortable daily wear t-shirt"), MILD)
+    assert "made for daily wear" in scored.reasons
+
+
+def test_hiking_phrasing_matches_the_trekking_tag():
+    product = make_product("boot", attributes={"use_case": ["trekking"]})
+    scored = score_product(product, 0.5, _bucket("hiking shoes"), MILD)
+    assert "made for trekking" in scored.reasons
+
+
+def test_trailing_punctuation_does_not_hide_a_tag():
+    product = make_product("tee", attributes={"use_case": ["travel"]})
+    scored = score_product(product, 0.5, _bucket("tee", why="Packing for travel."), MILD)
+    assert "made for travel" in scored.reasons
+
+
+def test_synonyms_also_feed_the_use_case_conflict_check():
+    """A "workout" bucket is an active intent just as a "gym" one is, so a
+    party-only item is still recognised as the wrong thing."""
+    party = make_product("party", attributes={"use_case": ["party"]})
+    scored = score_product(party, 0.7, _bucket("workout t-shirt"), MILD)
+    assert "made for party, not this" in scored.reasons
+
+
+def test_an_occasion_clause_that_repeats_the_use_case_is_not_shown():
+    product = make_product(
+        "shirt", attributes={"use_case": ["office"], "occasion": ["office"], "material": "Cotton"}
+    )
+    scored = score_product(product, 0.5, _bucket("shirt for office"), MILD)
+    assert scored.reasons[:2] == ["made for office", "built with cotton"]
+
+
+def test_budget_fit_is_cited_only_as_a_last_resort():
+    filters = QueryFilters(price_max=2000)
+    bare = make_product("bare", price_inr=1500)
+    tagged = make_product(
+        "tagged", price_inr=1500, attributes={"use_case": ["gym"], "material": "Polyester"}
+    )
+    bucket = _bucket("gym t-shirt")
+
+    assert score_product(bare, 0.5, bucket, MILD, filters=filters).reasons == [
+        "within your ₹2,000 budget"
+    ]
+    assert score_product(tagged, 0.5, bucket, MILD, filters=filters).reasons[:2] == [
+        "made for gym",
+        "built with polyester",
+    ]
+
+
+def test_budget_fit_is_not_claimed_below_a_stated_floor():
+    product = make_product("cheap", price_inr=400)
+    scored = score_product(
+        product, 0.5, _bucket("jacket"), MILD, filters=QueryFilters(price_min=1000, price_max=3000)
+    )
+    assert not any("budget" in r for r in scored.reasons)
+
+
+def test_ambiguous_words_do_not_imply_a_tag():
+    """"work boots" are not office wear and "run errands" is not running;
+    only words that mean exactly one tag belong in the synonym table."""
+    office = make_product("oxford", attributes={"use_case": ["office"]})
+    runner = make_product("runner", attributes={"use_case": ["running"]})
+    assert not any(
+        r.startswith("made for") for r in score_product(office, 0.5, _bucket("work boots"), MILD).reasons
+    )
+    assert not any(
+        r.startswith("made for")
+        for r in score_product(runner, 0.5, _bucket("a t-shirt to run errands in"), MILD).reasons
+    )

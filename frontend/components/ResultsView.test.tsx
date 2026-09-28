@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { makeRecommendation, makeResponse } from "@/lib/test-fixtures";
@@ -101,5 +101,63 @@ describe("ResultsView", () => {
       />,
     );
     expect(screen.getByText(/2 products from 1738 in the catalogue/)).toBeInTheDocument();
+  });
+
+  it("labels only the first item of a multi-item group as the best match", () => {
+    const first = makeRecommendation();
+    const second = makeRecommendation({ product: { ...first.product, id: "p2" }, match_score: 0.8 });
+    render(
+      <ResultsView
+        response={makeResponse({
+          groups: [
+            { name: "Pair", why_needed: "x", items: [first, second] },
+            { name: "Solo", why_needed: "y", items: [makeRecommendation({ product: { ...first.product, id: "p3" } })] },
+          ],
+        })}
+      />,
+    );
+    expect(screen.getAllByText("Best match")).toHaveLength(1);
+  });
+
+  it("collapses groups past the third until the shopper opens them", () => {
+    const base = makeRecommendation();
+    const groups = Array.from({ length: 5 }, (_, g) => ({
+      name: `Group ${g + 1}`,
+      why_needed: `Reason ${g + 1}`,
+      items: [0, 1].map((i) =>
+        makeRecommendation({
+          product: { ...base.product, id: `g${g}-${i}`, title: `Item ${g + 1}.${i + 1}` },
+        }),
+      ),
+    }));
+    render(<ResultsView response={makeResponse({ groups })} />);
+
+    // Every group's heading and reason stays visible, so the kit reads whole.
+    for (let g = 1; g <= 5; g++) {
+      expect(screen.getByText(`Group ${g}`)).toBeInTheDocument();
+      expect(screen.getByText(`Reason ${g}`)).toBeInTheDocument();
+    }
+    expect(screen.getByText("Item 3.1")).toBeInTheDocument();
+    expect(screen.queryByText("Item 4.1")).not.toBeInTheDocument();
+    expect(screen.queryByText("Item 5.1")).not.toBeInTheDocument();
+
+    const buttons = screen.getAllByRole("button", { name: "Show 2 picks" });
+    expect(buttons).toHaveLength(2);
+    fireEvent.click(buttons[0]);
+
+    expect(screen.getByText("Item 4.1")).toBeInTheDocument();
+    expect(screen.queryByText("Item 5.1")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Show 2 picks" })).toHaveLength(1);
+  });
+
+  it("does not collapse anything for three groups or fewer", () => {
+    const base = makeRecommendation();
+    const groups = [1, 2, 3].map((g) => ({
+      name: `G${g}`,
+      why_needed: "x",
+      items: [makeRecommendation({ product: { ...base.product, id: `p${g}` } })],
+    }));
+    render(<ResultsView response={makeResponse({ groups })} />);
+    expect(screen.queryByRole("button", { name: /Show \d+ pick/ })).not.toBeInTheDocument();
   });
 });

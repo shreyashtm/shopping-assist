@@ -97,7 +97,29 @@ SEVERE_EXCESS_C = 15.0
 
 # Penalties are subtracted after scaling: unlike boosts, these are statements
 # about the listing itself rather than about how well it fits the request.
+#
+# "blocked" and "archival" are different claims and are penalised differently.
+# A blocked link came from the retailer's own live search results and only the
+# final page check was refused, so it stays a mild preference. An archival
+# record was never live-checked at all -- its link, price and MRP are a
+# historical snapshot -- and at the old shared 0.02 it was indistinguishable
+# from a verified listing: archival items took the top slots over comparable
+# verified ones in 7 of 9 mixed-provenance buckets, leading by 0.01-0.13.
+#
+# 0.08 is a measured compromise, not the largest value that works. Swept over
+# 30 representative buckets: at 0.15 only 6 archival items still held a slot
+# over a verified alternative, but 17 verified items that fit clearly worse
+# (by >0.05 before this penalty) took slots from better archival ones -- a
+# verified running shoe beat archival formal shoes for an office request. At
+# 0.08 those counts are 16 and 4, and the office request keeps a formal shoe
+# first; below 0.05 the penalty barely reorders anything.
+#
+# It also stays well below the 0.5 "wrong for this request" penalties: an
+# archival listing is still the right product type, and must not sink below a
+# verified one that is wrong for the conditions. In a bucket with no verified
+# candidates every item carries the same penalty, so nothing is reordered there.
 PENALTY_UNVERIFIED_LINK = 0.02
+PENALTY_ARCHIVAL_LINK = 0.08
 PENALTY_OUT_OF_STOCK = 0.25
 # Deliberately large. A thermal conflict is a statement that the product is
 # wrong for the conditions, not that it is slightly less apt -- so it has to be
@@ -148,6 +170,10 @@ EVIDENCE_USE_CASE = 3
 EVIDENCE_OCCASION = 4
 EVIDENCE_MATERIAL = 5
 EVIDENCE_POPULARITY = 6
+# Lowest: every candidate already passed the price ceiling, so this is only
+# shown when nothing more specific exists -- but it is still a checked fact
+# about this request, which the generic fallback sentence is not.
+EVIDENCE_BUDGET = 7
 
 # Below this a rating is too thinly sourced to quote at a shopper.
 MIN_REVIEWS_TO_CITE = 50
@@ -473,6 +499,52 @@ def implied_seasons(context: ResolvedContext) -> set[str]:
     return seasons
 
 
+# Bucket wording -> the catalogue tags it means. Tags are a closed vocabulary
+# ("daily-wear", "trekking", "gym", "office"), but bucket phrases are free
+# text, so literal matching missed the most common tag entirely: 1,069 of
+# 1,725 products carry "daily-wear", and a bucket asking for a "daily wear
+# t-shirt" tokenises to "daily" and "wear", never "daily-wear". Likewise
+# "hiking" never matched "trekking" and "workout" never matched "gym".
+# Kept small and unambiguous on purpose -- each entry must be a word a shopper
+# uses to mean exactly that tag.
+_TAG_SYNONYMS: dict[str, tuple[str, ...]] = {
+    "daily": ("daily-wear", "everyday"),
+    "everyday": ("daily-wear",),
+    "casual": ("daily-wear", "everyday"),
+    "hike": ("trekking",),
+    "hiking": ("trekking",),
+    "trek": ("trekking",),
+    "trail": ("trekking",),
+    "camp": ("camping",),
+    "workout": ("gym",),
+    "fitness": ("gym",),
+    "training": ("gym",),
+    "jogging": ("running",),
+    "corporate": ("office",),
+    "trip": ("travel",),
+    "holiday": ("travel",),
+    "vacation": ("travel",),
+    "gift": ("gifting",),
+}
+
+
+def _phrase_tokens(bucket: Bucket) -> set[str]:
+    """Words the bucket uses, plus the catalogue tags those words mean.
+
+    Punctuation is stripped so "trek." from a why_needed sentence still counts
+    as "trek".
+    """
+    tokens = {
+        token.lower().strip(".,;:!?()'\"")
+        for phrase in [*bucket.search_phrases, bucket.name, bucket.why_needed]
+        for token in phrase.replace(",", " ").split()
+    }
+    tokens.discard("")
+    for token in list(tokens):
+        tokens.update(_TAG_SYNONYMS.get(token, ()))
+    return tokens
+
+
 def _overlap(left: list[str], right: set[str]) -> list[str]:
     return [item for item in left if item.lower() in right]
 
@@ -503,23 +575,29 @@ def score_product(
     boost = 0.0
     evidence: list[tuple[int, str]] = []
 
-    phrase_tokens = {
-        token.lower()
-        for phrase in [*bucket.search_phrases, bucket.name, bucket.why_needed]
-        for token in phrase.replace(",", " ").split()
-    }
+    phrase_tokens = _phrase_tokens(bucket)
 
     matched_use = _overlap(product.attributes.use_case, phrase_tokens)
     if matched_use:
         boost += BOOST_USE_CASE
-        evidence.append((EVIDENCE_USE_CASE, f"made for {', '.join(matched_use)}"))
+        # Tags are stored hyphenated ("daily-wear"); shoppers read words.
+        shown = ", ".join(u.replace("-", " ") for u in matched_use)
+        evidence.append((EVIDENCE_USE_CASE, f"made for {shown}"))
 
     conflicting_use = use_case_conflict(product, phrase_tokens)
 
     matched_occasion = _overlap(product.attributes.occasion, phrase_tokens)
     if matched_occasion:
         boost += BOOST_OCCASION
-        evidence.append((EVIDENCE_OCCASION, f"suits {', '.join(matched_occasion)}"))
+        # "Made for office; suits office" spends both visible clauses on one
+        # fact. The boost still counts; only the repeated sentence is dropped,
+        # so the second slot goes to something new (material, budget, rating).
+        said = {u.lower() for u in matched_use}
+        if "daily-wear" in said:
+            said.add("everyday")
+        new_occasions = [o for o in matched_occasion if o.lower() not in said]
+        if new_occasions:
+            evidence.append((EVIDENCE_OCCASION, f"suits {', '.join(new_occasions)}"))
 
     seasons = implied_seasons(context)
     if not seasons and context.climate_note:
@@ -590,6 +668,13 @@ def score_product(
             # sensibly, and always leaves an in-range product ahead of every
             # product beneath it.
             boost += BOOST_IN_BUDGET * (product.price_inr / filters.price_min)
+    if (
+        filters is not None
+        and filters.price_max
+        and product.price_inr <= filters.price_max
+        and (not filters.price_min or product.price_inr >= filters.price_min)
+    ):
+        evidence.append((EVIDENCE_BUDGET, f"within your ₹{filters.price_max:,} budget"))
 
     # Social proof, compressed hard: this should break ties between comparable
     # products, never lift a poor match above a good one.
@@ -620,7 +705,9 @@ def score_product(
         score -= use_case_penalty
     if not product.in_stock:
         score -= PENALTY_OUT_OF_STOCK
-    if product.link_status != "verified":
+    if product.link_status == "archival":
+        score -= PENALTY_ARCHIVAL_LINK
+    elif product.link_status != "verified":
         # Mildly prefer products whose link we actually confirmed resolves.
         score -= PENALTY_UNVERIFIED_LINK
 

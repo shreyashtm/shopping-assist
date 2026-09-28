@@ -21,6 +21,19 @@ describe("ProductCard", () => {
     expect(screen.getByText("28% off")).toBeInTheDocument();
   });
 
+  it("shows no discount or struck-through MRP for an archival product", () => {
+    render(
+      <ProductCard
+        item={makeRecommendation({
+          product: makeProduct({ price_inr: 1487, mrp_inr: 2075, link_status: "archival" }),
+        })}
+      />,
+    );
+    expect(screen.queryByText(/% off/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/2,075/)).not.toBeInTheDocument();
+    expect(screen.getByText(/1,487/)).toBeInTheDocument();
+  });
+
   it("shows no discount badge when there is no mrp", () => {
     render(
       <ProductCard item={makeRecommendation({ product: makeProduct({ mrp_inr: null }) })} />,
@@ -97,5 +110,17 @@ describe("ProductCard", () => {
     );
     expect(screen.getByText(/4\.1/)).toBeInTheDocument();
     expect(screen.getByText(/903/)).toBeInTheDocument();
+  });
+
+  it("marks the best match with a label and a stronger border", () => {
+    const { container } = render(<ProductCard item={makeRecommendation()} isBestMatch />);
+    expect(screen.getByText("Best match")).toBeInTheDocument();
+    expect(container.querySelector("article")).toHaveClass("border-foreground");
+  });
+
+  it("shows no best-match label by default", () => {
+    const { container } = render(<ProductCard item={makeRecommendation()} />);
+    expect(screen.queryByText("Best match")).not.toBeInTheDocument();
+    expect(container.querySelector("article")).toHaveClass("border-border");
   });
 });

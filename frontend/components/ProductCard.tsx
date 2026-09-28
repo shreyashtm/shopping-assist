@@ -35,19 +35,38 @@ function ProvenanceBadge({ status }: { status: Recommendation["product"]["link_s
   );
 }
 
-export function ProductCard({ item }: { item: Recommendation }) {
+/**
+ * `isBestMatch` marks the top-ranked item of a group. The ranking itself is
+ * the score made visible: `match_score` is normalised against the group's
+ * best item, so #1 is always 1.0 and a raw percentage on the others would
+ * read as an absolute quality claim the number cannot support.
+ */
+export function ProductCard({
+  item,
+  isBestMatch = false,
+}: {
+  item: Recommendation;
+  isBestMatch?: boolean;
+}) {
   const { product, reason } = item;
   // Many Amazon listings genuinely carry no brand; enrichment records that
   // honestly as "Generic", which reads oddly as a label. Fall back to the
   // subcategory, which is always meaningful.
   const label = product.brand && product.brand !== "Generic" ? product.brand : product.subcategory;
+  // No discount for archival records: "28% off" implies a live comparison of
+  // today's price against today's MRP, and an archival snapshot was never
+  // checked against either. The price itself stays, labelled as archival.
   const discount =
-    product.mrp_inr && product.mrp_inr > product.price_inr
+    product.link_status !== "archival" && product.mrp_inr && product.mrp_inr > product.price_inr
       ? Math.round((1 - product.price_inr / product.mrp_inr) * 100)
       : null;
 
   return (
-    <article className="group flex flex-col border border-border bg-surface transition-colors hover:border-foreground">
+    <article
+      className={`group flex flex-col border bg-surface transition-colors hover:border-foreground ${
+        isBestMatch ? "border-foreground" : "border-border"
+      }`}
+    >
       <div className="relative aspect-square w-full border-b border-border bg-surface-muted">
         {product.image_url ? (
           <Image
@@ -72,6 +91,7 @@ export function ProductCard({ item }: { item: Recommendation }) {
 
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div>
+          {isBestMatch && <p className="eyebrow mb-1 text-accent">Best match</p>}
           <p className="eyebrow text-muted">{label}</p>
           <h4 className="mt-1 line-clamp-2 text-sm leading-snug">{product.title}</h4>
         </div>

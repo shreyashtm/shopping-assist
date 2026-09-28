@@ -1,8 +1,17 @@
+"use client";
+
+import { useState } from "react";
+
 import type { RecommendResponse, UnfilledSlot } from "@/lib/types";
 
 import { ContextStrip } from "./ContextStrip";
 import { ContextVariablesPanel } from "./ContextVariablesPanel";
 import { ProductCard } from "./ProductCard";
+
+// A broad request (a full trek kit) can return 8 groups x 4 cards. Past this
+// many groups the rest start collapsed to their heading and reason, so the
+// whole kit still reads as one outline and the shopper opens what they need.
+const OPEN_GROUPS = 3;
 
 function UnfilledSlotsPanel({ slots }: { slots: UnfilledSlot[] }) {
   if (slots.length === 0) return null;
@@ -41,6 +50,7 @@ export function ResultsView({ response }: { response: RecommendResponse }) {
   const contextVariables = response.context_variables ?? [];
   const total = groups.reduce((n, g) => n + g.items.length, 0);
   const missingRequired = unfilled.some((s) => s.role === "required");
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
 
   return (
     <section className="animate-rise space-y-10">
@@ -120,11 +130,28 @@ export function ResultsView({ response }: { response: RecommendResponse }) {
                   {group.why_needed}
                 </p>
               </div>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {group.items.map((item) => (
-                  <ProductCard key={item.product.id} item={item} />
-                ))}
-              </div>
+              {index < OPEN_GROUPS || expanded.has(group.name) ? (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {group.items.map((item, rank) => (
+                    <ProductCard
+                      key={item.product.id}
+                      item={item}
+                      // A lone item is trivially "best"; the label only means
+                      // something when there is a comparison.
+                      isBestMatch={rank === 0 && group.items.length > 1}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  aria-expanded={false}
+                  onClick={() => setExpanded((prev) => new Set(prev).add(group.name))}
+                  className="border border-border px-4 py-2 text-xs font-medium uppercase tracking-wide text-accent transition-colors hover:border-foreground"
+                >
+                  Show {group.items.length} pick{group.items.length === 1 ? "" : "s"}
+                </button>
+              )}
             </div>
           ))}
         </div>
