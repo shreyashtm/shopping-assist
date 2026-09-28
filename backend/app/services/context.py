@@ -44,6 +44,7 @@ none that quietly downgrades to the model's guess without labelling it.
 
 import logging
 import math
+import unicodedata
 from datetime import date, timedelta
 
 from app.adapters.weather.open_meteo import (
@@ -103,21 +104,64 @@ def elevation_agrees(measured_m: float, estimated_m: float | None) -> bool:
     return abs(measured_m - estimated_m) <= tolerance
 
 
+def _fold(name: str | None) -> str:
+    """Case- and accent-insensitive form, so "Léh" and "leh" compare equal."""
+    decomposed = unicodedata.normalize("NFKD", name or "")
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).strip().lower()
+
+
+# How many times larger a same-name place must be before a bare name is
+# trusted to mean it. Shimla (173k vs an unpopulated namesake) and Udaipur
+# (451k vs 33k) clear it; Manali does not -- the Tamil Nadu town is four times
+# the Himalayan one, which is the one trekkers mean.
+DOMINANT_POPULATION_RATIO = 10
+
+
+def _dominant(same_name: list[Place]) -> Place | None:
+    """The one place a bare name clearly means, or None when it is ambiguous.
+
+    Duplicates within one state are the same place for weather purposes. Across
+    states, only an overwhelmingly larger place is trusted.
+    """
+    if len({p.admin1 for p in same_name}) == 1:
+        return max(same_name, key=lambda p: p.population or 0)
+    ranked = sorted(same_name, key=lambda p: p.population or 0, reverse=True)
+    top, runner_up = ranked[0].population or 0, ranked[1].population or 0
+    if top and top >= DOMINANT_POPULATION_RATIO * runner_up:
+        return ranked[0]
+    return None
+
+
 def pick_place(
     candidates: list[Place],
     proposed_lat: float | None,
     proposed_lon: float | None,
+    query: str | None = None,
 ) -> Place | None:
     """Choose among same-named places.
 
     Nearest to the proposed point when there is one, because that is the only
-    signal that actually distinguishes them. Falling back to the first result
-    keeps the common single-match case working.
+    signal that actually distinguishes them.
+
+    Without a proposal, only Indian candidates are accepted, exact name first,
+    and a name shared across states must have a clearly dominant holder.
+    The geocoder ranks by its own relevance, and taking its first hit sent
+    "Leh" to Le Havre, France and "Goa" to Genoa, Italy -- measured weather for
+    the wrong continent, ranked on as if it were the trip. The catalogue and
+    its shoppers are Indian, so with nothing else to go on an Indian place is
+    the reading that matters; when none exists (Goa is a state, not a town,
+    so it has no entry) the honest answer is no place rather than a guess.
     """
     if not candidates:
         return None
     if proposed_lat is None or proposed_lon is None:
-        return candidates[0]
+        indian = [p for p in candidates if p.country == "India"]
+        if not indian:
+            return None
+        exact = [p for p in indian if _fold(p.name) == _fold(query)]
+        if not exact:
+            return indian[0]
+        return _dominant(exact)
 
     nearest = min(
         candidates,
@@ -321,7 +365,7 @@ def _locate(
         except WeatherUnavailable as exc:
             logger.info("Geocoding %r failed, falling back to proposal: %s", location, exc)
 
-    chosen = pick_place(candidates, proposed_lat, proposed_lon)
+    chosen = pick_place(candidates, proposed_lat, proposed_lon, location)
     if chosen is not None:
         elevation = chosen.elevation_m
         if elevation is None:

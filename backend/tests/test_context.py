@@ -39,6 +39,47 @@ def test_pick_place_prefers_nearest_to_proposal():
     assert chosen.admin1 == "Himachal Pradesh"
 
 
+# Without model coordinates the first geocoder hit used to win outright. Both
+# candidate lists below are what Open-Meteo actually returned on 2026-09-28.
+
+LEH = [
+    Place("Le Havre", 49.49, 0.11, 5.0, "France", "Normandy", 185972),
+    Place("Leh", 34.16, 77.58, 3500.0, "India", "Ladakh", 37475),
+    Place("Leh", 47.2, 11.0, None, "Austria", None, None),
+]
+GOA = [
+    Place("Genoa", 44.41, 8.93, 20.0, "Italy", "Liguria", 580097),
+    Place("Goa", 13.55, 123.28, None, "Philippines", None, 20936),
+    Place("Goa", 55.0, 38.0, None, "Russia", None, None),
+]
+
+
+def test_without_coordinates_an_indian_exact_match_beats_the_first_hit():
+    """"Leh" resolved to Le Havre, France: a December Leh trek ranked for
+    3.7-10.9C instead of nights near -15C."""
+    chosen = pick_place(LEH, None, None, "Leh")
+    assert chosen is not None and chosen.country == "India" and chosen.name == "Leh"
+
+
+def test_without_coordinates_no_indian_candidate_is_unobtainable_not_a_guess():
+    """"Goa" is a state, so the geocoder has no Indian entry at all and
+    offered Genoa. Better to report conditions as unobtainable."""
+    assert pick_place(GOA, None, None, "Goa") is None
+
+
+def test_without_coordinates_an_indian_non_exact_name_is_still_accepted():
+    """"Ooty" geocodes only to its official name, Udhagamandalam."""
+    ooty = [Place("Udhagamandalam", 11.41, 76.7, 2240.0, "India", "Tamil Nadu", 233426)]
+    assert pick_place(ooty, None, None, "Ooty") is ooty[0]
+
+
+def test_with_coordinates_foreign_places_are_still_allowed():
+    """The India preference applies only when there is no proposal to match
+    against; a model-supplied point still picks the nearest candidate."""
+    chosen = pick_place(LEH, 49.5, 0.1)
+    assert chosen is not None and chosen.country == "France"
+
+
 def test_render_summary_includes_provenance():
     from app.schemas.query import ClimateContext
 
@@ -195,3 +236,32 @@ def test_unobtainable_never_invents_numbers():
     assert climate.source == "unobtainable"
     assert climate.temp_min_c is None
     assert climate.temp_max_c is None
+
+
+# Same-name places in different states, as Open-Meteo returned them on
+# 2026-09-28. Without coordinates only a clearly dominant one is trusted.
+
+
+def _india(name, admin1, population, lat=20.0, lon=78.0):
+    return Place(name, lat, lon, None, "India", admin1, population)
+
+
+def test_without_coordinates_a_cross_state_tie_is_ambiguous():
+    """Name-only "Manali" went to Tamil Nadu (20.9-29.2C in December) rather
+    than the Himalayan town, which is the smaller of the two."""
+    manali = [_india("Manali", "Tamil Nadu", 35248), _india("Manali", "Himachal Pradesh", 8096)]
+    assert pick_place(manali, None, None, "Manali") is None
+    auli = [_india("Auli", "Himachal Pradesh", None), _india("Auli", "Uttarakhand", None)]
+    assert pick_place(auli, None, None, "Auli") is None
+
+
+def test_without_coordinates_a_dominant_same_name_place_is_trusted():
+    shimla = [_india("Shimla", "Himachal Pradesh", 173503), _india("Shimla", "Rajasthan", None)]
+    assert pick_place(shimla, None, None, "Shimla").admin1 == "Himachal Pradesh"
+    udaipur = [_india("Udaipur", "Rajasthan", 451100), _india("Udaipur", "Tripura", 32758)]
+    assert pick_place(udaipur, None, None, "Udaipur").admin1 == "Rajasthan"
+
+
+def test_without_coordinates_same_state_duplicates_are_not_ambiguous():
+    darjeeling = [_india("Darjeeling", "West Bengal", 123797), _india("Darjeeling", "West Bengal", None)]
+    assert pick_place(darjeeling, None, None, "Darjeeling").population == 123797
