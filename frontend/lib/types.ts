@@ -157,3 +157,7 @@ export type Stage =
   | "checking conditions"
   | "searching"
   | "cached";
+
+export interface PreviewQuestionsResponse {
+  questions: ClarifyingQuestion[];
+}

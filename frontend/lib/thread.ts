@@ -8,6 +8,7 @@
  */
 
 import type {
+  ClarifyingQuestion,
   ContextVariable,
   RecommendRequest,
   RecommendResponse,
@@ -36,6 +37,19 @@ export interface AssistantTurn {
   error: string | null;
   /** What produced this turn, so retry and clarify replies can re-post it. */
   request: RecommendRequest;
+  /**
+   * Best-effort questions guessed from raw text, shown while `status` is
+   * still `"loading"` so the shopper has something to act on during the one
+   * real wait in the pipeline. `null` until the preview call resolves (or
+   * fails silently); `[]` means it resolved with nothing to ask. Cleared to
+   * `null` once the turn finishes -- by then `response.questions` is the
+   * real answer and the guess has no further use.
+   */
+  provisionalQuestions: ClarifyingQuestion[] | null;
+  /** Slot -> tapped value, queued while a provisional question is answered
+   * before the real interpretation has returned. Reconciled against
+   * `response.questions` in `matchedProvisionalAnswers` once it does. */
+  provisionalAnswers: Record<string, string>;
 }
 
 export type Turn = UserTurn | AssistantTurn;
@@ -114,4 +128,24 @@ export function describeAnswers(
 
 export function newId(): string {
   return Math.random().toString(36).slice(2, 10);
+}
+
+/**
+ * Which provisionally-answered slots turned out to match a real question.
+ *
+ * Only a match is safe to auto-apply: the provisional questions are a guess
+ * from text alone, so an unmatched answer means the guess was wrong for this
+ * request, not that the shopper's tap should be silently forced onto an
+ * unrelated real question. An unmatched answer is simply dropped -- the
+ * ClarifyPanel for the real questions renders normally, as if nothing had
+ * been pre-answered.
+ */
+export function matchedProvisionalAnswers(
+  provisionalAnswers: Record<string, string>,
+  realQuestions: ClarifyingQuestion[],
+): string[] {
+  const realSlots = new Set(realQuestions.map((q) => q.slot));
+  return Object.entries(provisionalAnswers)
+    .filter(([slot]) => realSlots.has(slot))
+    .map(([, value]) => value);
 }

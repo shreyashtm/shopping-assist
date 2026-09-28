@@ -28,7 +28,7 @@ from app.adapters.weather.open_meteo import OpenMeteoClient
 from app.core.cache import cache_key, response_cache
 from app.core.config import get_settings
 from app.core.deps import get_taxonomy
-from app.schemas.query import ClarifyingQuestion, QueryFilters, StructuredQuery
+from app.schemas.query import Bucket, ClarifyingQuestion, QueryFilters, StructuredQuery
 from app.schemas.recommend import (
     Recommendation,
     RecommendationGroup,
@@ -73,18 +73,50 @@ logger = logging.getLogger(__name__)
 # (see `interpreter.SYSTEM` and `StructuredQuery._cap_questions`).
 MAX_CLARIFY_ANSWERS = 4
 
-# A clarify response previews products alongside its questions -- except when
-# the request is too undirected for a preview to mean anything. "Trekking
-# gear, no dates yet" still gets 3-4 cohesive buckets (layering, footwear,
-# navigation) worth showing; "a gift for my sister" with nothing else stated
-# gets the interpreter improvising across unrelated life categories (apparel,
-# jewellery, bags, beauty, home) because it has no real signal to focus on.
-# Past this many buckets, showing the preview stopped being "a useful initial
-# outcome" and started being 20+ weak "closest match" picks the shopper has
-# to wade through before reaching the two questions that would have actually
-# focused the search. The system prompt's own bucket-count guidance ("split
-# into 2-5 buckets") is the source for where "focused" ends.
+# A clarify response previews products alongside its questions. The risk this
+# guards against is real: "a gift for my sister" with nothing else stated gets
+# the interpreter improvising across unrelated life categories (apparel,
+# jewellery, bags, beauty, home) because it has no real signal to focus on,
+# and showing all of that would be 20+ weak "closest match" picks the shopper
+# has to wade through before reaching the questions that would have actually
+# focused the search.
+#
+# This used to gate on the request's *total* bucket count -- past this many
+# buckets, no preview at all. That excluded exactly the requests this app is
+# for: "trekking Hampta Pass" or "monsoon wear for Mumbai" routinely plan 5-8
+# cohesive buckets (layering, footwear, navigation, rain protection, ...),
+# so the broadest, most effort-justifying requests got the worst possible
+# result -- a completely empty first turn. `_select_preview_buckets` now
+# caps *how many buckets are shown*, not *whether any are*: it always picks
+# the MAX_BUCKETS_FOR_PREVIEW most important ones (required role first, then
+# declared priority) regardless of how many total buckets exist, so a request
+# never gets excluded from a preview for being thorough.
 MAX_BUCKETS_FOR_PREVIEW = 3
+
+
+def _select_preview_buckets(buckets: list[Bucket], limit: int) -> list[Bucket]:
+    """The buckets worth previewing before questions are answered, or none.
+
+    A request under `limit` buckets previews all of them, unchanged from
+    before. Past that, previewing is worth doing only when the request has
+    genuine structure to prioritise by -- at least one `role="required"`
+    bucket. Without that signal, "top N by priority" is not actually
+    meaningful: "a gift for my sister" with no other detail produces buckets
+    across apparel, jewellery, bags and beauty that are all `role="optional"`
+    at the same priority, because the interpreter has no real basis to rank
+    them -- it is guessing across unrelated categories, not planning a kit.
+    Showing "the first 3 guesses" there is not a smaller version of a useful
+    preview, it is still filler, just less of it. That case gets no preview
+    at all and goes straight to the question.
+    """
+    if len(buckets) <= limit:
+        return buckets
+    if not any(b.role == "required" for b in buckets):
+        return []
+
+    role_rank = {"required": 0, "recommended": 1, "optional": 2}
+    ranked = sorted(buckets, key=lambda b: (role_rank.get(b.role, 3), b.priority))
+    return ranked[:limit]
 
 
 def _with_overrides(inferred: QueryFilters, override: QueryFilters | None) -> QueryFilters:
@@ -487,12 +519,28 @@ def recommend_events(
     # --- 5. Ask, if asking would still change the answer --------------------
     # Retrieval already ran above, so a clarify response carries whatever
     # products are already good matches alongside the follow-up questions --
-    # a turn never ends with only a question and no recommendation when the
-    # request was focused enough for that preview to be useful. A request
-    # broad enough to spread across many buckets gets questions only; the
-    # preview would be scattered "closest match" filler, not a real answer.
+    # a turn never ends with only a question and no recommendation.
+    #
+    # Previously this was all-or-nothing: a request spanning more than
+    # MAX_BUCKETS_FOR_PREVIEW buckets got questions only, on the theory that a
+    # scattered preview across many buckets would read as filler rather than a
+    # real answer. In practice that excluded exactly the requests this app
+    # exists for -- a trekking kit or a monsoon wardrobe routinely plans 5-8
+    # buckets, so the broadest, highest-effort requests were the ones that got
+    # *zero* preview, the worst possible outcome for the queries most worth
+    # answering well.
+    #
+    # The fix keeps the same instinct -- don't show scattered filler -- but
+    # applies it per bucket instead of per request: preview only the
+    # highest-priority buckets (required role first, then declared priority),
+    # capped at MAX_BUCKETS_FOR_PREVIEW, rather than refusing to preview any
+    # of them once the total crosses that count. `questions` still covers the
+    # whole request regardless of how much of it gets previewed.
     if structured.needs_clarification and not payload.skip_clarification:
-        focused = len(structured.buckets) <= MAX_BUCKETS_FOR_PREVIEW
+        preview_buckets = _select_preview_buckets(structured.buckets, MAX_BUCKETS_FOR_PREVIEW)
+        preview_names = {b.name for b in preview_buckets}
+        preview_groups = [g for g in groups if g.name in preview_names]
+        preview_unfilled = [u for u in unfilled if u.name in preview_names]
         yield "result", _cache_and_return(key, RecommendResponse(
             query_id=str(uuid.uuid4()),
             mode="clarify",
@@ -501,8 +549,8 @@ def recommend_events(
             assumptions=structured.assumptions,
             context_variables=context_variables,
             questions=structured.questions,
-            groups=groups if focused else [],
-            unfilled_slots=unfilled if focused else [],
+            groups=preview_groups,
+            unfilled_slots=preview_unfilled,
             meta=ResponseMeta(
                 latency_ms=elapsed(), llm_calls=llm_calls,
                 degraded_mode=degraded, catalogue_size=len(catalogue), notes=notes,

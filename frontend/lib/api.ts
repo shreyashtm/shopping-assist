@@ -1,4 +1,10 @@
-import type { RecommendRequest, RecommendResponse, Stage } from "./types";
+import type {
+  ClarifyingQuestion,
+  PreviewQuestionsResponse,
+  RecommendRequest,
+  RecommendResponse,
+  Stage,
+} from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -101,4 +107,33 @@ export async function recommendStreaming(
 
   if (!result) throw new ApiError("The assistant stopped before returning results.", 500);
   return result;
+}
+
+/**
+ * Best-effort questions guessed from raw text, fired alongside `recommendStreaming`
+ * rather than instead of it.
+ *
+ * Deliberately silent on failure: this exists to fill the wait while
+ * interpretation runs, and interpretation succeeding or failing is entirely
+ * independent of whether this call worked. A caller who let this throw would
+ * turn "the preview didn't load" into "the whole search failed," which is
+ * strictly worse than just showing no provisional questions.
+ */
+export async function previewQuestions(
+  query: string,
+  signal?: AbortSignal,
+): Promise<ClarifyingQuestion[]> {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/recommend/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query }),
+      signal,
+    });
+    if (!res.ok) return [];
+    const data: PreviewQuestionsResponse = await res.json();
+    return data.questions;
+  } catch {
+    return [];
+  }
 }

@@ -1,17 +1,36 @@
 import json
 import logging
 from collections.abc import Iterator
+from datetime import date
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from app.core.deps import get_catalogue, get_provider
-from app.schemas.recommend import RecommendRequest, RecommendResponse
+from app.schemas.recommend import (
+    PreviewQuestionsResponse,
+    PreviewRequest,
+    RecommendRequest,
+    RecommendResponse,
+)
+from app.services.context_slots import guess_preview_questions
 from app.services.recommend import recommend as run_recommendation
 from app.services.recommend import recommend_events
 
 router = APIRouter(tags=["recommendations"])
 logger = logging.getLogger(__name__)
+
+
+@router.post("/recommend/preview", response_model=PreviewQuestionsResponse)
+async def recommend_preview(payload: PreviewRequest) -> PreviewQuestionsResponse:
+    """Best-effort questions from text alone, before interpretation runs.
+
+    No LLM call, no catalogue access -- this exists purely so the shopper has
+    something to act on during the one real wait in the pipeline. The client
+    fires this alongside `/recommend/stream`, not instead of it; whatever the
+    real interpretation returns is always what actually happens.
+    """
+    return PreviewQuestionsResponse(questions=guess_preview_questions(payload.query, date.today()))
 
 
 @router.post("/recommend", response_model=RecommendResponse)

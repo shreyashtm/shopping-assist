@@ -93,6 +93,36 @@ _APPAREL_HINTS = (
 _GIFT_HINTS = ("gift", "present", "anniversary", "hamper")
 
 
+def guess_preview_questions(query: str, today: date) -> list[ClarifyingQuestion]:
+    """Best-effort questions from the raw request text, before interpretation runs.
+
+    This exists to close the gap between submitting a request and getting
+    anything back -- interpretation is the one LLM call in the pipeline and it
+    is the entire latency budget (see performance.md), so the shopper waits in
+    total silence for it today. These are shown immediately, tappable, while
+    that call is still in flight; `services/recommend.py::_reconcile_provisional_answers`
+    applies whichever ones turn out to match a real question once interpretation
+    actually returns.
+
+    Deliberately narrow and high-confidence rather than exhaustive: guessing
+    wrong here costs nothing (an unmatched answer is silently dropped, never
+    applied), but guessing something irrelevant is still noise the shopper has
+    to ignore while waiting, so this only asks what the same heuristics already
+    used for the real audit consider a strong, common signal -- dates for
+    anything condition-dependent, and who it's for on clothing and gear, which
+    is close to always relevant. It never asks budget or occasion speculatively;
+    those are narrower guesses than this text alone can support with the same
+    confidence.
+    """
+    text = query.lower()
+    questions: list[ClarifyingQuestion] = []
+    if _implies_dated_trip(text):
+        questions.append(_dates_question(today))
+    if _implies_trek(text) or _implies_apparel(text):
+        questions.append(GENDER_QUESTION)
+    return questions
+
+
 def _answered_keys(answers: list[str]) -> set[str]:
     keys: set[str] = set()
     for answer in answers:

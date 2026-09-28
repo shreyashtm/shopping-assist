@@ -6,12 +6,13 @@ import { AssistantTurnView } from "@/components/AssistantTurn";
 import { QueryBar } from "@/components/QueryBar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMessage } from "@/components/UserMessage";
-import { recommendStreaming } from "@/lib/api";
+import { previewQuestions, recommendStreaming } from "@/lib/api";
 import type { AssistantTurn, Turn } from "@/lib/thread";
 import {
   composeFollowUp,
   describeAnswers,
   establishedContext,
+  matchedProvisionalAnswers,
   newId,
 } from "@/lib/thread";
 import type { RecommendRequest } from "@/lib/types";
@@ -24,6 +25,14 @@ export default function Home() {
   const inFlight = useRef<AbortController | null>(null);
   const newestTurnRef = useRef<HTMLDivElement | null>(null);
 
+  // Mirrors AssistantTurn.provisionalAnswers, keyed by turn id, so the
+  // completion handler in `run()` can read the *current* tapped answers the
+  // instant the real response arrives -- reading through React state there
+  // would see whatever `provisionalAnswers` closed over at call time, not
+  // whatever the shopper tapped in the meantime. State still holds the same
+  // data for rendering; this ref exists only for that one synchronous read.
+  const provisionalAnswersRef = useRef<Map<string, Record<string, string>>>(new Map());
+
   const busy = turns.some((t) => t.kind === "assistant" && t.status === "loading");
   const started = turns.length > 0;
 
@@ -35,13 +44,23 @@ export default function Home() {
     newestTurnRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [turns.length]);
 
-  /** Append an assistant turn and drive it to completion from the stream. */
-  async function run(request: RecommendRequest) {
+  /**
+   * Append an assistant turn and drive it to completion from the stream.
+   *
+   * `enablePreview` fires `/recommend/preview` concurrently with the real
+   * request -- best-effort guessed questions shown while the one real LLM
+   * call is in flight. Only set for a shopper's own typed message: `answer`
+   * and `skip` also call `run`, but by then the shopper is already past
+   * clarification, so guessing fresh questions for that turn would be noise,
+   * not help.
+   */
+  async function run(request: RecommendRequest, options: { enablePreview?: boolean } = {}) {
     inFlight.current?.abort();
     const controller = new AbortController();
     inFlight.current = controller;
 
     const id = newId();
+    provisionalAnswersRef.current.set(id, {});
     setTurns((prev) => [
       ...prev,
       {
@@ -52,6 +71,8 @@ export default function Home() {
         response: null,
         error: null,
         request,
+        provisionalQuestions: null,
+        provisionalAnswers: {},
       },
     ]);
 
@@ -60,14 +81,48 @@ export default function Home() {
         prev.map((t) => (t.kind === "assistant" && t.id === id ? { ...t, ...update } : t)),
       );
 
+    if (options.enablePreview) {
+      void previewQuestions(request.query, controller.signal).then((questions) => {
+        patch({ provisionalQuestions: questions });
+      });
+    }
+
     try {
       const result = await recommendStreaming(
         request,
         (stage) => patch({ stage }),
         controller.signal,
       );
-      patch({ status: "done", response: result, stage: null });
+
+      // Read before clearing: this is the one synchronous point where "what
+      // did the shopper tap while we were loading" still matters.
+      const tapped = provisionalAnswersRef.current.get(id) ?? {};
+      const matched = matchedProvisionalAnswers(tapped, result.questions);
+      provisionalAnswersRef.current.delete(id);
+
+      patch({
+        status: "done",
+        response: result,
+        stage: null,
+        provisionalQuestions: null,
+      });
+
+      if (result.mode === "clarify" && matched.length > 0) {
+        // The shopper already answered while waiting, and it turned out to
+        // be one of the real questions -- continue immediately rather than
+        // making them notice the (now-redundant) question and tap again.
+        const label = describeAnswers(result, matched);
+        setTurns((prev) => [
+          ...prev,
+          { kind: "user", id: newId(), text: label, origin: "chip" },
+        ]);
+        void run({
+          query: request.query,
+          answers: [...(request.answers ?? []), ...matched],
+        });
+      }
     } catch (err) {
+      provisionalAnswersRef.current.delete(id);
       if (err instanceof DOMException && err.name === "AbortError") {
         // Superseded by a newer message, which has already appended its own
         // turn. Drop this one rather than leaving a spinner that never ends.
@@ -79,6 +134,21 @@ export default function Home() {
         error: err instanceof Error ? err.message : "Something went wrong.",
       });
     }
+  }
+
+  /** Tap a provisional (still-loading) question's option, or tap it again to clear it. */
+  function answerProvisional(turnId: string, slot: string, value: string) {
+    const current = provisionalAnswersRef.current.get(turnId) ?? {};
+    const next =
+      current[slot] === value
+        ? Object.fromEntries(Object.entries(current).filter(([key]) => key !== slot))
+        : { ...current, [slot]: value };
+    provisionalAnswersRef.current.set(turnId, next);
+    setTurns((prev) =>
+      prev.map((t) =>
+        t.kind === "assistant" && t.id === turnId ? { ...t, provisionalAnswers: next } : t,
+      ),
+    );
   }
 
   /** The newest completed response, used to carry context into a follow-up. */
@@ -110,7 +180,7 @@ export default function Home() {
       : text;
 
     setTurns((prev) => [...prev, { kind: "user", id: newId(), text, origin: "typed" }]);
-    void run({ query });
+    void run({ query }, { enablePreview: true });
   }
 
   function answer(turn: AssistantTurn, answers: string[]) {
@@ -193,6 +263,7 @@ export default function Home() {
                   onAnswer={answer}
                   onSkip={skip}
                   onRetry={(t) => void run(t.request)}
+                  onAnswerProvisional={answerProvisional}
                 />
               )}
             </div>

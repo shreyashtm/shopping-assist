@@ -5,9 +5,10 @@ import {
   composeFollowUp,
   describeAnswers,
   establishedContext,
+  matchedProvisionalAnswers,
   newId,
 } from "./thread";
-import type { ContextVariable, RecommendResponse } from "./types";
+import type { ClarifyingQuestion, ContextVariable, RecommendResponse } from "./types";
 
 function makeVariable(overrides: Partial<ContextVariable>): ContextVariable {
   return {
@@ -143,6 +144,49 @@ describe("describeAnswers", () => {
 
   it("falls back to 'Answered' for an empty values list", () => {
     expect(describeAnswers(response, [])).toBe("Answered");
+  });
+});
+
+describe("matchedProvisionalAnswers", () => {
+  const realQuestions: ClarifyingQuestion[] = [
+    {
+      slot: "gender",
+      question: "Who is this for?",
+      options: [{ label: "Men", value: "gender:men" }],
+      allow_multiple: false,
+    },
+  ];
+
+  it("keeps a provisional answer whose slot matches a real question", () => {
+    const result = matchedProvisionalAnswers({ gender: "gender:men" }, realQuestions);
+    expect(result).toEqual(["gender:men"]);
+  });
+
+  it("drops a provisional answer whose slot the real interpretation never asked about", () => {
+    // The guess was wrong for this request -- the real interpretation needed
+    // something else entirely, so applying the guess would be silently
+    // forcing an unrelated tap onto the actual result.
+    const result = matchedProvisionalAnswers(
+      { dates: "start_date:2026-10-01,duration_days:7" },
+      realQuestions,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("keeps only the matching subset when some slots match and some do not", () => {
+    const result = matchedProvisionalAnswers(
+      { gender: "gender:men", dates: "timing:unknown" },
+      realQuestions,
+    );
+    expect(result).toEqual(["gender:men"]);
+  });
+
+  it("returns an empty list when nothing was tapped", () => {
+    expect(matchedProvisionalAnswers({}, realQuestions)).toEqual([]);
+  });
+
+  it("returns an empty list when the real interpretation asked no questions at all", () => {
+    expect(matchedProvisionalAnswers({ gender: "gender:men" }, [])).toEqual([]);
   });
 });
 

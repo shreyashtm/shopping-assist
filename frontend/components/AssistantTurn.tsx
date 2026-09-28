@@ -1,6 +1,7 @@
 "use client";
 
 import { ClarifyPanel } from "@/components/ClarifyPanel";
+import { ProvisionalQuestions } from "@/components/ProvisionalQuestions";
 import { ResultsView } from "@/components/ResultsView";
 import { ThinkingState } from "@/components/ThinkingState";
 import type { AssistantTurn as Turn } from "@/lib/thread";
@@ -12,6 +13,7 @@ interface Props {
   onAnswer: (turn: Turn, answers: string[]) => void;
   onSkip: (turn: Turn) => void;
   onRetry: (turn: Turn) => void;
+  onAnswerProvisional: (turnId: string, slot: string, value: string) => void;
 }
 
 /**
@@ -37,11 +39,27 @@ function AskedSummary({ turn }: { turn: Turn }) {
   );
 }
 
-export function AssistantTurnView({ turn, isLast, onAnswer, onSkip, onRetry }: Props) {
+export function AssistantTurnView({
+  turn,
+  isLast,
+  onAnswer,
+  onSkip,
+  onRetry,
+  onAnswerProvisional,
+}: Props) {
   if (turn.status === "loading") {
     return (
-      <div className="border-l-2 border-accent pl-4 sm:pl-5">
-        <ThinkingState stage={turn.stage} />
+      <div className="space-y-6">
+        <div className="border-l-2 border-accent pl-4 sm:pl-5">
+          <ThinkingState stage={turn.stage} />
+        </div>
+        {turn.provisionalQuestions && turn.provisionalQuestions.length > 0 && (
+          <ProvisionalQuestions
+            questions={turn.provisionalQuestions}
+            answers={turn.provisionalAnswers}
+            onAnswer={(slot, value) => onAnswerProvisional(turn.id, slot, value)}
+          />
+        )}
       </div>
     );
   }

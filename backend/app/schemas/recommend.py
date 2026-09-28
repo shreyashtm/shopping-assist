@@ -106,3 +106,20 @@ class RecommendResponse(BaseModel):
         "'required' role means the request was not fully satisfied, and the UI says so.",
     )
     meta: ResponseMeta
+
+
+class PreviewRequest(BaseModel):
+    """Input for the provisional-questions preview, ahead of full interpretation."""
+
+    query: str = Field(min_length=3, max_length=1000)
+
+
+class PreviewQuestionsResponse(BaseModel):
+    """Best-effort questions guessed from raw text alone -- no LLM, no catalogue.
+
+    Shown immediately while the real interpretation call is still in flight.
+    Never authoritative: `RecommendResponse.questions` from the completed
+    search is what actually drove the answer, if any question was asked at all.
+    """
+
+    questions: list[ClarifyingQuestion] = Field(default_factory=list)
