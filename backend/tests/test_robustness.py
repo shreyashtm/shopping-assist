@@ -60,6 +60,26 @@ def test_total_llm_outage_still_returns_products(catalogue):
     assert response.meta.notes, "degradation must be explained, not silent"
 
 
+def test_outage_fallback_does_not_add_unrequested_categories(catalogue):
+    """Seen live: OpenRouter's free model returned no text, the request fell
+    back to keyword routing, and "laptop" matched the Clothing keyword "top",
+    so shirts and trousers were offered to someone asking for a bag."""
+    response = recommend(
+        RecommendRequest(
+            query="I need a bag or backpack for carrying my laptop and books every day to office",
+            skip_clarification=True,
+        ),
+        catalogue,
+        DeadProvider(),
+        today=TODAY,
+    )
+    assert response.meta.degraded_mode is True
+    assert [g.name for g in response.groups] == ["Bags"]
+    assert all(
+        i.product.category == "Bags & Luggage" for g in response.groups for i in g.items
+    )
+
+
 def test_no_provider_configured_still_returns_products(catalogue):
     response = recommend(
         RecommendRequest(query="traditional wedding sherwani", skip_clarification=True),

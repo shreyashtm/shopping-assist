@@ -7,6 +7,8 @@ October means sub-zero nights. Anything built on it is flagged `degraded_mode`
 so weaker results are never passed off as reasoning.
 """
 
+import re
+
 from app.schemas.query import (
     Bucket,
     ClarifyingQuestion,
@@ -154,7 +156,9 @@ def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
     categories: list[str] = []
 
     for keywords, bucket_name, paths, phrase in _ROUTES:
-        if any(word in text for word in keywords):
+        # Word-start match, not substring: "top" must not fire inside
+        # "laptop", while "bag" still matches "bags" and "camp" "camping".
+        if any(re.search(rf"\b{re.escape(word)}", text) for word in keywords):
             if bucket_name in {b.name for b in buckets}:
                 continue
             categories.extend(p.split("/")[0] for p in paths)
