@@ -172,7 +172,9 @@ actually demands, using real-world knowledge:
 Put terrain and activity reasoning in `why_needed`. Do NOT state temperatures in
 `climate_note` -- a later stage looks up real weather. For any named place
 (mountain pass, trail, city), set `location`, `location_lat`, `location_lon`,
-and `elevation_estimate_m` from your geographic knowledge. Leave ALL FOUR
+and `elevation_estimate_m` from your geographic knowledge. Qualify `location`
+with its state or country ("Auli, Uttarakhand", "Leh, Ladakh", "Dubai, UAE"):
+a bare name is looked up in a gazetteer and many are shared. Leave ALL FOUR
 null when the request names no place at all -- do not invent a placeholder
 country or region ("India - unspecified city") to fill the field. A generic
 "Indian shopping assistant" framing is not a location the user gave you.

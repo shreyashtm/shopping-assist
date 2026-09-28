@@ -116,9 +116,13 @@ Trip context is resolved outside the model when possible:
 - precipitation
 - forecast or climatology source
 
-Open-Meteo supplies measured data. If a place is obscure, the model may propose
-coordinates, but measured elevation is used to corroborate the proposal before
-weather is trusted.
+Open-Meteo supplies measured data. Place names are resolved through
+OpenStreetMap Nominatim, which ranks by prominence and covers states and
+regions ("Goa", "Ladakh"); with model coordinates, the nearest candidate wins.
+Open-Meteo's own settlement geocoder is only a fallback for matching model
+coordinates, because its unranked first hit sent "Leh" to Le Havre. If a place
+is obscure, the model may propose coordinates, but measured elevation is used
+to corroborate the proposal before weather is trusted.
 
 If conditions cannot be established, the climate value becomes `unobtainable`
 and the response records that temperature evidence was not used.
@@ -301,7 +305,7 @@ backend/app/core/                   config, dependency loading, cache, errors
 backend/app/schemas/                Pydantic request/response/product models
 backend/app/adapters/llm/           Anthropic and OpenRouter providers, shared protocol
 backend/app/adapters/embeddings/    local and hashing embedders
-backend/app/adapters/weather/       Open-Meteo client
+backend/app/adapters/weather/       Open-Meteo and Nominatim clients
 backend/app/services/interpreter.py natural language -> StructuredQuery
 backend/app/services/recommend.py   orchestration
 backend/app/services/retrieval.py   filtering, scoring and bucket search

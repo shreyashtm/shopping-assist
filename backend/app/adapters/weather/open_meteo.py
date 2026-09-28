@@ -68,7 +68,11 @@ class Place:
 
     @property
     def display(self) -> str:
-        parts = [p for p in (self.name, self.admin1, self.country) if p]
+        parts: list[str] = []
+        for part in (self.name, self.admin1, self.country):
+            # A region named after its state ("Goa, Goa") reads as a typo.
+            if part and part not in parts:
+                parts.append(part)
         return ", ".join(parts)
 
 

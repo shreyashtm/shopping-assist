@@ -118,7 +118,8 @@ with grouped recommendations. See [api.md](api.md) for examples.
 - AI: Anthropic, OpenRouter, or a local Ollama model (configurable) for
   structured intent interpretation; deterministic explanation composition.
 - Retrieval: local `all-MiniLM-L6-v2` embeddings over the committed catalogue.
-- Context: Open-Meteo for weather, elevation and climatology.
+- Context: Open-Meteo for weather, elevation and climatology; OpenStreetMap
+  Nominatim for place names (keyless, 1 request/second, results cached).
 
 ## Design Decisions
 

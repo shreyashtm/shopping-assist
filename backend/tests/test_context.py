@@ -39,47 +39,6 @@ def test_pick_place_prefers_nearest_to_proposal():
     assert chosen.admin1 == "Himachal Pradesh"
 
 
-# Without model coordinates the first geocoder hit used to win outright. Both
-# candidate lists below are what Open-Meteo actually returned on 2026-09-28.
-
-LEH = [
-    Place("Le Havre", 49.49, 0.11, 5.0, "France", "Normandy", 185972),
-    Place("Leh", 34.16, 77.58, 3500.0, "India", "Ladakh", 37475),
-    Place("Leh", 47.2, 11.0, None, "Austria", None, None),
-]
-GOA = [
-    Place("Genoa", 44.41, 8.93, 20.0, "Italy", "Liguria", 580097),
-    Place("Goa", 13.55, 123.28, None, "Philippines", None, 20936),
-    Place("Goa", 55.0, 38.0, None, "Russia", None, None),
-]
-
-
-def test_without_coordinates_an_indian_exact_match_beats_the_first_hit():
-    """"Leh" resolved to Le Havre, France: a December Leh trek ranked for
-    3.7-10.9C instead of nights near -15C."""
-    chosen = pick_place(LEH, None, None, "Leh")
-    assert chosen is not None and chosen.country == "India" and chosen.name == "Leh"
-
-
-def test_without_coordinates_no_indian_candidate_is_unobtainable_not_a_guess():
-    """"Goa" is a state, so the geocoder has no Indian entry at all and
-    offered Genoa. Better to report conditions as unobtainable."""
-    assert pick_place(GOA, None, None, "Goa") is None
-
-
-def test_without_coordinates_an_indian_non_exact_name_is_still_accepted():
-    """"Ooty" geocodes only to its official name, Udhagamandalam."""
-    ooty = [Place("Udhagamandalam", 11.41, 76.7, 2240.0, "India", "Tamil Nadu", 233426)]
-    assert pick_place(ooty, None, None, "Ooty") is ooty[0]
-
-
-def test_with_coordinates_foreign_places_are_still_allowed():
-    """The India preference applies only when there is no proposal to match
-    against; a model-supplied point still picks the nearest candidate."""
-    chosen = pick_place(LEH, 49.5, 0.1)
-    assert chosen is not None and chosen.country == "France"
-
-
 def test_render_summary_includes_provenance():
     from app.schemas.query import ClimateContext
 
@@ -238,30 +197,111 @@ def test_unobtainable_never_invents_numbers():
     assert climate.temp_max_c is None
 
 
-# Same-name places in different states, as Open-Meteo returned them on
-# 2026-09-28. Without coordinates only a clearly dominant one is trusted.
+# --- ranked geocoding --------------------------------------------------------
+#
+# Live checks on 2026-09-28: with no model coordinates, Open-Meteo's unranked
+# settlement list sent "Leh" to Le Havre and "Goa" to Genoa. Nominatim ranks by
+# prominence and covers states and regions, so its first hit is trusted for a
+# bare name; Open-Meteo is only ever used to match a proposed point.
+
+from app.adapters.weather.nominatim import NominatimClient  # noqa: E402
+from app.services import context as context_module  # noqa: E402
 
 
-def _india(name, admin1, population, lat=20.0, lon=78.0):
-    return Place(name, lat, lon, None, "India", admin1, population)
+class _GazetteerTransport(httpx.BaseTransport):
+    """Nominatim returns `ranked`; Open-Meteo geocoding returns `unranked`."""
+
+    def __init__(self, ranked=None, nominatim_down=False, unranked=None):
+        self.ranked = ranked or []
+        self.nominatim_down = nominatim_down
+        self.unranked = unranked or []
+
+    def handle_request(self, request):
+        url = str(request.url)
+        if "nominatim" in url:
+            if self.nominatim_down:
+                return httpx.Response(503)
+            return httpx.Response(200, json=self.ranked)
+        if "geocoding" in url:
+            return httpx.Response(200, json={"results": self.unranked})
+        if "elevation" in url:
+            return httpx.Response(200, json={"elevation": [3500.0]})
+        return _MockTransport().handle_request(request)
 
 
-def test_without_coordinates_a_cross_state_tie_is_ambiguous():
-    """Name-only "Manali" went to Tamil Nadu (20.9-29.2C in December) rather
-    than the Himalayan town, which is the smaller of the two."""
-    manali = [_india("Manali", "Tamil Nadu", 35248), _india("Manali", "Himachal Pradesh", 8096)]
-    assert pick_place(manali, None, None, "Manali") is None
-    auli = [_india("Auli", "Himachal Pradesh", None), _india("Auli", "Uttarakhand", None)]
-    assert pick_place(auli, None, None, "Auli") is None
+def _nominatim(name, lat, lon, state, country):
+    return {"name": name, "lat": str(lat), "lon": str(lon),
+            "address": {"state": state, "country": country}}
 
 
-def test_without_coordinates_a_dominant_same_name_place_is_trusted():
-    shimla = [_india("Shimla", "Himachal Pradesh", 173503), _india("Shimla", "Rajasthan", None)]
-    assert pick_place(shimla, None, None, "Shimla").admin1 == "Himachal Pradesh"
-    udaipur = [_india("Udaipur", "Rajasthan", 451100), _india("Udaipur", "Tripura", 32758)]
-    assert pick_place(udaipur, None, None, "Udaipur").admin1 == "Rajasthan"
+def _resolve(place, transport, lat=None, lon=None):
+    context_module._place_cache.clear()
+    ctx = ResolvedContext(location=place, start_date=date(2026, 12, 20), end_date=date(2026, 12, 27))
+    client = OpenMeteoClient(transport=transport)
+    places = NominatimClient(transport=transport)
+    try:
+        return resolve_climate(ctx, client, date(2026, 9, 28), proposed_lat=lat,
+                               proposed_lon=lon, places=places)
+    finally:
+        client.close(); places.close()
 
 
-def test_without_coordinates_same_state_duplicates_are_not_ambiguous():
-    darjeeling = [_india("Darjeeling", "West Bengal", 123797), _india("Darjeeling", "West Bengal", None)]
-    assert pick_place(darjeeling, None, None, "Darjeeling").population == 123797
+@pytest.fixture(autouse=False)
+def no_throttle(monkeypatch):
+    monkeypatch.setattr("app.adapters.weather.nominatim.MIN_INTERVAL_S", 0.0)
+
+
+def test_name_only_uses_the_ranked_gazetteer_first_hit(no_throttle):
+    transport = _GazetteerTransport(
+        ranked=[_nominatim("Leh", 34.0, 77.66, "Ladakh", "India")],
+        unranked=[{"name": "Le Havre", "latitude": 49.49, "longitude": 0.11, "country": "France"}],
+    )
+    climate = _resolve("Leh", transport)
+    assert climate.place_resolved == "Leh, Ladakh, India"
+
+
+def test_name_only_foreign_destination_resolves_abroad(no_throttle):
+    """No country preference: a shopper flying to Dubai means the UAE."""
+    transport = _GazetteerTransport(ranked=[_nominatim("Dubai", 25.07, 55.19, "Dubai", "United Arab Emirates")])
+    assert _resolve("Dubai", transport).place_resolved.endswith("United Arab Emirates")
+
+
+def test_name_only_never_guesses_from_the_unranked_list(no_throttle):
+    """Nominatim down: Open-Meteo's first hit is exactly the Le Havre failure."""
+    transport = _GazetteerTransport(
+        nominatim_down=True,
+        unranked=[{"name": "Le Havre", "latitude": 49.49, "longitude": 0.11, "country": "France"}],
+    )
+    climate = _resolve("Leh", transport)
+    assert climate.source == "unobtainable"
+
+
+def test_model_coordinates_pick_the_matching_candidate(no_throttle):
+    """A bare "Auli" ranks a Ukrainian village first; the model's point near
+    Joshimath selects the Uttarakhand one from the same list."""
+    transport = _GazetteerTransport(ranked=[
+        _nominatim("Auly", 48.54, 34.45, "Dnipropetrovsk Oblast", "Ukraine"),
+        _nominatim("Auli", 60.03, 11.35, "Akershus", "Norway"),
+        _nominatim("Auli", 30.54, 79.57, "Uttarakhand", "India"),
+    ])
+    climate = _resolve("Auli", transport, lat=30.53, lon=79.56)
+    assert climate.place_resolved == "Auli, Uttarakhand, India"
+
+
+def test_nominatim_adapter_parses_and_tolerates_bad_rows(no_throttle):
+    transport = _GazetteerTransport(ranked=[
+        {"name": "Goa", "lat": "15.3", "lon": "74.08", "address": {"state": "Goa", "country": "India"}},
+        {"name": "broken", "lat": "not-a-number", "lon": "1"},
+    ])
+    client = NominatimClient(transport=transport)
+    try:
+        places = client.search("Goa")
+    finally:
+        client.close()
+    assert [(p.name, p.country, p.latitude) for p in places] == [("Goa", "India", 15.3)]
+
+
+def test_place_display_does_not_repeat_a_region_named_after_its_state():
+    from app.adapters.weather.open_meteo import Place
+    assert Place("Goa", 15.3, 74.1, None, "India", "Goa", None).display == "Goa, India"
+    assert Place("Manali", 32.2, 77.2, None, "India", "Himachal Pradesh", None).display == "Manali, Himachal Pradesh, India"

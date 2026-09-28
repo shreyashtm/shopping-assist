@@ -24,6 +24,7 @@ from typing import Any
 
 from app.adapters.embeddings.local import get_embedder
 from app.adapters.llm.base import LLMProvider, LLMUnavailable
+from app.adapters.weather.nominatim import NominatimClient
 from app.adapters.weather.open_meteo import OpenMeteoClient
 from app.core.cache import cache_key, response_cache
 from app.core.config import get_settings
@@ -162,6 +163,7 @@ def _attach_climate(
         return structured, notes
 
     client = OpenMeteoClient()
+    places = NominatimClient()
     try:
         climate = resolve_climate(
             ctx,
@@ -172,9 +174,11 @@ def _attach_climate(
             proposed_elevation_m=float(ctx.elevation_estimate_m)
             if ctx.elevation_estimate_m is not None
             else None,
+            places=places,
         )
     finally:
         client.close()
+        places.close()
 
     if climate is None:
         return structured, notes

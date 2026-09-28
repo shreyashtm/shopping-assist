@@ -44,9 +44,9 @@ none that quietly downgrades to the model's guess without labelling it.
 
 import logging
 import math
-import unicodedata
 from datetime import date, timedelta
 
+from app.adapters.weather.nominatim import NominatimClient
 from app.adapters.weather.open_meteo import (
     FORECAST_HORIZON_DAYS,
     DailySeries,
@@ -104,64 +104,23 @@ def elevation_agrees(measured_m: float, estimated_m: float | None) -> bool:
     return abs(measured_m - estimated_m) <= tolerance
 
 
-def _fold(name: str | None) -> str:
-    """Case- and accent-insensitive form, so "Léh" and "leh" compare equal."""
-    decomposed = unicodedata.normalize("NFKD", name or "")
-    return "".join(c for c in decomposed if not unicodedata.combining(c)).strip().lower()
-
-
-# How many times larger a same-name place must be before a bare name is
-# trusted to mean it. Shimla (173k vs an unpopulated namesake) and Udaipur
-# (451k vs 33k) clear it; Manali does not -- the Tamil Nadu town is four times
-# the Himalayan one, which is the one trekkers mean.
-DOMINANT_POPULATION_RATIO = 10
-
-
-def _dominant(same_name: list[Place]) -> Place | None:
-    """The one place a bare name clearly means, or None when it is ambiguous.
-
-    Duplicates within one state are the same place for weather purposes. Across
-    states, only an overwhelmingly larger place is trusted.
-    """
-    if len({p.admin1 for p in same_name}) == 1:
-        return max(same_name, key=lambda p: p.population or 0)
-    ranked = sorted(same_name, key=lambda p: p.population or 0, reverse=True)
-    top, runner_up = ranked[0].population or 0, ranked[1].population or 0
-    if top and top >= DOMINANT_POPULATION_RATIO * runner_up:
-        return ranked[0]
-    return None
-
-
 def pick_place(
     candidates: list[Place],
     proposed_lat: float | None,
     proposed_lon: float | None,
-    query: str | None = None,
 ) -> Place | None:
     """Choose among same-named places.
 
     Nearest to the proposed point when there is one, because that is the only
-    signal that actually distinguishes them.
-
-    Without a proposal, only Indian candidates are accepted, exact name first,
-    and a name shared across states must have a clearly dominant holder.
-    The geocoder ranks by its own relevance, and taking its first hit sent
-    "Leh" to Le Havre, France and "Goa" to Genoa, Italy -- measured weather for
-    the wrong continent, ranked on as if it were the trip. The catalogue and
-    its shoppers are Indian, so with nothing else to go on an Indian place is
-    the reading that matters; when none exists (Goa is a state, not a town,
-    so it has no entry) the honest answer is no place rather than a guess.
+    signal that actually distinguishes them. Without a proposal the first
+    candidate wins, so callers must only pass a list whose order means
+    something -- see `_locate`, which never does this with Open-Meteo's
+    unranked settlement list.
     """
     if not candidates:
         return None
     if proposed_lat is None or proposed_lon is None:
-        indian = [p for p in candidates if p.country == "India"]
-        if not indian:
-            return None
-        exact = [p for p in indian if _fold(p.name) == _fold(query)]
-        if not exact:
-            return indian[0]
-        return _dominant(exact)
+        return candidates[0]
 
     nearest = min(
         candidates,
@@ -272,6 +231,7 @@ def resolve_climate(
     proposed_lat: float | None = None,
     proposed_lon: float | None = None,
     proposed_elevation_m: float | None = None,
+    places: NominatimClient | None = None,
 ) -> ClimateContext | None:
     """Resolve conditions for a request, or report that we could not.
 
@@ -293,7 +253,7 @@ def resolve_climate(
 
     try:
         located = _locate(
-            context.location, proposed_lat, proposed_lon, proposed_elevation_m, client
+            context.location, proposed_lat, proposed_lon, proposed_elevation_m, client, places
         )
     except WeatherUnavailable as exc:
         return unobtainable(context, f"location lookup failed: {exc}")
@@ -345,6 +305,7 @@ def _locate(
     proposed_lon: float | None,
     proposed_elevation_m: float | None,
     client: OpenMeteoClient,
+    places: NominatimClient | None = None,
 ) -> tuple[float, float, float | None, str] | None:
     """Settle on coordinates, or return None.
 
@@ -352,6 +313,12 @@ def _locate(
     with, because a real gazetteer entry is stronger evidence than a model's
     recall. The proposal is the fallback, and only survives if the measured
     elevation at that point corroborates it.
+
+    Candidates come from Nominatim, which ranks by prominence and knows states
+    and regions, so with no proposal its first result is a sound reading of a
+    bare name. Open-Meteo's settlement list is the fallback when Nominatim is
+    unreachable, but it is unranked -- its first hit sent "Leh" to Le Havre --
+    so it is only ever used to match a proposed point, never to guess one.
     """
     key = f"{location}|{proposed_lat}|{proposed_lon}"
     cached = _place_cache.get(key)
@@ -359,13 +326,21 @@ def _locate(
         return cached
 
     candidates: list[Place] = []
-    if location:
+    ranked = False
+    if location and places is not None:
+        try:
+            candidates = places.search(location)
+            ranked = True
+        except WeatherUnavailable as exc:
+            logger.info("Nominatim lookup of %r failed, trying Open-Meteo: %s", location, exc)
+    if location and not ranked:
         try:
             candidates = client.geocode(location)
         except WeatherUnavailable as exc:
             logger.info("Geocoding %r failed, falling back to proposal: %s", location, exc)
 
-    chosen = pick_place(candidates, proposed_lat, proposed_lon, location)
+    has_proposal = proposed_lat is not None and proposed_lon is not None
+    chosen = pick_place(candidates, proposed_lat, proposed_lon) if (ranked or has_proposal) else None
     if chosen is not None:
         elevation = chosen.elevation_m
         if elevation is None:
