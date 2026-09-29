@@ -6,11 +6,51 @@ for what is a solved, cheap, offline problem. all-MiniLM-L6-v2 is ~90MB, encodes
 the whole 1,725-product catalogue in a second or two, and costs nothing per query.
 """
 
+import logging
+import os
+import time
 from functools import lru_cache
 
 import numpy as np
 
 from app.adapters.embeddings.base import l2_normalise
+
+
+logger = logging.getLogger(__name__)
+
+# Phrases like a real search's, for timing the encoder at startup.
+_PROBE_PHRASES = [
+    "insulated down jacket", "thermal base layer", "waterproof trekking boots",
+    "wool hiking socks", "headlamp", "trekking backpack", "fleece jacket",
+    "gift hamper", "formal shirt", "running shoes", "kurta set", "sunglasses",
+]
+
+
+def container_cpus() -> int:
+    """CPUs this process may actually use, which in a container is its quota.
+
+    torch sizes its thread pool from the host's core count. On Railway the
+    host has many cores but the service is capped at 2 vCPU, so torch ran a
+    dozens-strong pool on two CPUs: a search stage that takes 0.2s locally
+    took 84s deployed, CPU pinned at the cap, no I/O in the logs.
+    """
+    try:
+        with open("/sys/fs/cgroup/cpu.max") as f:  # cgroup v2: "<quota> <period>"
+            quota, period = f.read().split()
+        if quota != "max":
+            return max(1, int(int(quota) / int(period)))
+    except (OSError, ValueError):
+        pass
+    try:
+        return max(1, len(os.sched_getaffinity(0)))
+    except AttributeError:  # macOS
+        return max(1, os.cpu_count() or 1)
+
+
+def _time_encode(model) -> float:
+    started = time.perf_counter()
+    model.encode(_PROBE_PHRASES, batch_size=32, show_progress_bar=False, convert_to_numpy=True)
+    return (time.perf_counter() - started) * 1000
 
 
 class LocalEmbeddings:
@@ -31,6 +71,25 @@ class LocalEmbeddings:
             self._model, "get_embedding_dimension", None
         ) or self._model.get_sentence_embedding_dimension
         self.dimension = get_dim()
+        self._fit_threads_to_container()
+
+    def _fit_threads_to_container(self) -> None:
+        """Size torch's thread pool to the CPUs actually available, and log
+        the encode time before and after, so the effect is visible in the
+        deployment's logs without running a paid search."""
+        import torch
+
+        default_threads = torch.get_num_threads()
+        cpus = container_cpus()
+        _time_encode(self._model)  # first call pays one-off setup
+        before = _time_encode(self._model)
+        if cpus < default_threads:  # only ever narrow the pool
+            torch.set_num_threads(cpus)
+        after = _time_encode(self._model)
+        logger.info(
+            "Encoder threads: %d -> %d (container CPUs %d); %d phrases took %.0f ms -> %.0f ms",
+            default_threads, torch.get_num_threads(), cpus, len(_PROBE_PHRASES), before, after,
+        )
 
     def embed(self, texts: list[str]) -> np.ndarray:
         vectors = self._model.encode(

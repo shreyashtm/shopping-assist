@@ -84,8 +84,42 @@ def load_embedder() -> None:
             embedder.dimension,
             embedder.is_semantic,
         )
+        _log_search_probe(embedder)
     except Exception as exc:  # noqa: BLE001 - startup must survive any failure
         logger.warning("Embedder warm-up failed (%s); it will load on first search.", exc)
+
+
+def _log_search_probe(embedder) -> None:
+    """Time one real bucket search at startup and log it.
+
+    The deployed search stage took 84s against 0.2s locally, with no I/O in
+    the logs. This puts the same work's timing in every deployment's startup
+    log, so a slow host shows up without running a paid search.
+    """
+    import time
+
+    from app.schemas.query import Bucket, QueryFilters, ResolvedContext
+    from app.services.retrieval import search_bucket
+
+    catalogue = peek_catalogue()
+    if catalogue is None:
+        return
+    bucket = Bucket(
+        name="Probe", search_phrases=["insulated down jacket", "warm winter jacket"],
+        why_needed="startup timing", catalogue_paths=["Men's Apparel/Jackets & Coats"],
+    )
+    try:
+        started = time.perf_counter()
+        vectors = embedder.embed([*bucket.search_phrases, bucket.name])
+        embedded = time.perf_counter()
+        search_bucket(catalogue, vectors, bucket, QueryFilters(), ResolvedContext(), limit=12)
+        done = time.perf_counter()
+        logger.info(
+            "Search probe: embed %.0f ms, search %.0f ms",
+            (embedded - started) * 1000, (done - embedded) * 1000,
+        )
+    except Exception as exc:  # noqa: BLE001 - diagnostics must never stop startup
+        logger.warning("Search probe failed: %s", exc)
 
 
 def _build_named_provider(name: str, settings) -> LLMProvider | None:
