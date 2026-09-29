@@ -166,4 +166,18 @@ describe("ResultsView", () => {
     render(<ResultsView response={makeResponse({ groups })} />);
     expect(screen.queryByRole("button", { name: /Show \d+ pick/ })).not.toBeInTheDocument();
   });
+
+  it("shows a decline without the empty-catalogue advice", () => {
+    render(
+      <ResultsView
+        response={makeResponse({
+          groups: [],
+          declined: true,
+          intent_summary: "That doesn't look like a shopping request — tell me what you're looking for and I'll find it.",
+        })}
+      />,
+    );
+    expect(screen.getByText(/doesn't look like a shopping request/)).toBeInTheDocument();
+    expect(screen.queryByText("Nothing in the catalogue fits that closely.")).not.toBeInTheDocument();
+  });
 });

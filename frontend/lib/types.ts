@@ -133,6 +133,8 @@ export type ResponseMode = "results" | "clarify";
 export interface RecommendResponse {
   query_id: string;
   mode: ResponseMode;
+  /** True when the request was not a shopping request and was declined. */
+  declined?: boolean;
   intent_summary: string;
   context: ResolvedContext;
   assumptions: string[];

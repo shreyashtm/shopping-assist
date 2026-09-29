@@ -382,3 +382,68 @@ def test_the_requests_occasion_applies_to_every_group_on_the_model_path(catalogu
     titles = [i.product.title for items in groups.values() for i in items]
     assert not any("Bhaiya" in t for t in titles), titles
     assert groups.get("Fragrance & Perfumes"), list(groups)
+
+
+# The three issues from the frontend scenario run.
+
+MANALI_KIT = ("I'm a man going to Manali next week, need a jacket, thermals, gloves, "
+              "socks, trekking shoes and a backpack")
+
+
+def _response(catalogue, query, provider=None, **kw):
+    response_cache.clear()
+    return recommend(RecommendRequest(query=query, **kw), catalogue, provider or _NoModel(),
+                     today=date(2026, 9, 29))
+
+
+def test_named_items_show_products_even_when_a_question_is_asked(catalogue):
+    """Live: a request naming six items got only "Roughly what budget?"."""
+    for query in (MANALI_KIT, "a birthday gift for my wife, she loves perfumes and skincare"):
+        response = _response(catalogue, query)
+        assert response.groups, query
+
+
+def test_a_decline_is_marked_so_the_page_does_not_suggest_widening_a_budget(catalogue):
+    class _Decline:
+        name = "d"
+        is_real = True
+
+        def structured(self, **_):
+            return {"intent_summary": "Geography.", "is_shopping_request": False, "buckets": [],
+                    "filters": {}, "context": {}, "assumptions": []}
+
+    response = _response(catalogue, "what is the capital of France", _Decline(), skip_clarification=True)
+    assert response.declined is True
+    assert _response(catalogue, "wool socks for winter", skip_clarification=True).declined is False
+
+
+def test_dates_the_shopper_never_gave_are_not_shown_as_theirs(catalogue):
+    """Live: "women's high heels and a blazer for an office party" showed
+    "Dates · 2026-09-29 (you)" -- the model had set a one-day trip on today."""
+    class _InventsADate:
+        name = "i"
+        is_real = True
+
+        def structured(self, **_):
+            return {"intent_summary": "Heels and a blazer for an office party.", "is_shopping_request": True,
+                    "buckets": [{"name": "Heels", "search_phrases": ["heels"], "why_needed": "x",
+                                 "role": "required", "catalogue_paths": ["Footwear/Flats"]}],
+                    "filters": {"gender": "women"},
+                    "context": {"start_date": "2026-09-29", "end_date": "2026-09-29", "duration_days": 1},
+                    "assumptions": []}
+
+    response = _response(catalogue, "I need women's high heels and a blazer for an office party, budget 3000",
+                         _InventsADate())
+    assert not any(v.name == "dates" for v in response.context_variables)
+
+
+def test_a_stated_occasion_place_and_recipient_are_not_marked_needed(catalogue):
+    cases = {
+        "women's high heels and a blazer for an office party": "occasion",
+        "women's jeans and a top for college": "occasion",
+        MANALI_KIT: "location",
+        "a birthday gift for my wife, she loves perfumes": "recipient",
+    }
+    for query, slot in cases.items():
+        needed = {v.name for v in _response(catalogue, query).context_variables if v.status == "needed"}
+        assert slot not in needed, (query, needed)

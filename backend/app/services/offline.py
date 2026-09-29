@@ -339,6 +339,36 @@ def _plain_summary(query: str) -> str:
     return query.strip()
 
 
+_PLACE = re.compile(r"\b(?:to|in|near|around|at)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)")
+_NOT_PLACES = {
+    "I", "Men", "Women", "Rs", "INR", "January", "February", "March", "April", "May", "June", "July",
+    "August", "September", "October", "November", "December", "Monday", "Tuesday", "Wednesday",
+    "Thursday", "Friday", "Saturday", "Sunday",
+}
+_RECIPIENT = re.compile(
+    r"\bfor (?:my |our )?(wife|husband|mom|mother|mum|dad|father|son|daughter|brother|sister"
+    r"|boyfriend|girlfriend|friend|parents|grandfather|grandmother|colleague|boss|him|her)\b"
+)
+
+
+def _stated_place(query: str) -> str | None:
+    """A capitalised place after "to/in/near": "going to Manali", "near Leh".
+
+    Without it the keyword fallback showed "Place · needed" for a request that
+    named Manali, and never looked up the conditions there.
+    """
+    for m in _PLACE.finditer(query):
+        words = [w for w in m.group(1).split() if w not in _NOT_PLACES]
+        if words:
+            return " ".join(words)
+    return None
+
+
+def _stated_recipient(text: str) -> str | None:
+    m = _RECIPIENT.search(text)
+    return m.group(1) if m else None
+
+
 def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
     text = query.lower()
     buckets: list[Bucket] = []
@@ -441,7 +471,10 @@ def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
                 # read as a sentence ("You asked for wedding sherwani.").
                 why_needed=f"You asked for “{asked or phrase}”"
                 + (f", for {occasion_words}" if extra else "") + ".",
-                role="recommended",
+                # Named items are what was asked for. As "recommended", a
+                # request naming six items counted as scattered and was shown
+                # a budget question with no products at all.
+                role="recommended" if bucket_name in _CONTEXT_ROUTES else "required",
                 catalogue_paths=paths,
             )
         )
@@ -472,7 +505,7 @@ def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
         # Categories are left unset: the per-slot paths already constrain
         # retrieval, and a global category filter would only narrow it further.
         filters=stated,
-        context=ResolvedContext(),
+        context=ResolvedContext(location=_stated_place(query), recipient=_stated_recipient(text)),
         assumptions=["Interpreted without AI reasoning, so this is a keyword match."],
         needs_clarification=bool(questions),
         questions=questions,

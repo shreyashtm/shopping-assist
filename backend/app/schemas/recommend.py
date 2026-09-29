@@ -84,6 +84,11 @@ class RecommendResponse(BaseModel):
 
     query_id: str
     mode: Literal["results", "clarify"] = "results"
+    declined: bool = Field(
+        default=False,
+        description="True when the request is not a shopping request and was declined, "
+        "so the client shows the decline alone rather than an empty-results message.",
+    )
 
     intent_summary: str
     context: ResolvedContext = Field(default_factory=ResolvedContext)

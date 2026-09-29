@@ -47,7 +47,12 @@ from app.services.context import (
     needs_place_climate,
     resolve_climate,
 )
-from app.services.context_slots import apply_context_audit, is_specific_trip
+from app.services.context_slots import (
+    apply_context_audit,
+    has_date_answers,
+    is_specific_trip,
+    stated_dates,
+)
 from app.services.explain import explain_pick
 from app.services.interpreter import (
     drop_unsatisfiable_budget_options,
@@ -380,6 +385,15 @@ def recommend_events(
             degraded = True
             notes.append("AI interpretation unavailable; fell back to keyword matching.")
 
+    # Dates the shopper never gave are the model's invention, not a fact about
+    # the trip. Live, "heels and a blazer for an office party" showed "Dates ·
+    # 2026-09-29 (you)": a one-day trip on today's date. Dropping them lets the
+    # audit ask when a date genuinely matters, instead of guessing.
+    ctx = structured.context
+    if ctx.start_date and not stated_dates(payload.query) and not has_date_answers(payload.answers):
+        structured = structured.model_copy(update={"context": ctx.model_copy(
+            update={"start_date": None, "end_date": None, "duration_days": None})})
+
     if payload.answers:
         structured = merge_answers(structured, payload.answers)
 
@@ -441,6 +455,7 @@ def recommend_events(
         yield "result", RecommendResponse(
             query_id=str(uuid.uuid4()),
             mode="results",
+            declined=True,
             intent_summary=(
                 "That doesn't look like a shopping request — tell me what you're "
                 "looking for and I'll find it."

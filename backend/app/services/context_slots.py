@@ -113,6 +113,15 @@ _APPAREL_HINTS = (
 _GIFT_HINTS = ("gift", "present", "anniversary", "hamper")
 
 
+def stated_dates(text: str) -> bool:
+    """Whether the shopper's own words name a date or a time frame."""
+    return bool(_STATED_DATES.search(text.lower()))
+
+
+def has_date_answers(answers: list[str]) -> bool:
+    return any("start_date:" in a or "end_date:" in a for a in answers)
+
+
 def guess_preview_questions(query: str, today: date) -> list[ClarifyingQuestion]:
     """Best-effort questions from the raw request text, before interpretation runs.
 
@@ -206,6 +215,17 @@ def _has_gender(structured: StructuredQuery, answered: set[str]) -> bool:
     return bool(structured.filters.gender or "gender" in answered)
 
 
+# Words that name an actual occasion or setting. Deliberately not "everyday",
+# "daily", "casual" or "formal": the model uses those in its own bucket
+# descriptions ("Everyday tops.") whatever the shopper asked, and they must
+# not count as the shopper having said something.
+_OCCASION_SIGNAL = re.compile(
+    r"\b(wedding|anniversary|birthday|festive|festival|diwali|holi|eid|christmas|office"
+    r"|interview|party|parties|travel|vacation|holiday|college|school|gym|workout"
+    r"|date night|reception|sangeet|meeting|conference|beach)\b"
+)
+
+
 def _has_occasion_signal(structured: StructuredQuery, answered: set[str], text: str) -> bool:
     if "occasion" in answered or "use_case" in answered:
         return True
@@ -213,7 +233,9 @@ def _has_occasion_signal(structured: StructuredQuery, answered: set[str], text: 
         return True
     if any("wedding" in p.lower() for b in structured.buckets for p in b.search_phrases):
         return True
-    return False
+    # Any occasion or setting the request names. Live, "for an office party"
+    # and "for college" were still asked "What's the occasion?".
+    return bool(_OCCASION_SIGNAL.search(text))
 
 
 def _is_specific_trip(structured: StructuredQuery) -> bool:
