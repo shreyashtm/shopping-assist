@@ -15,11 +15,12 @@ request falls through to a keyword interpretation and the response says so via
 `degraded_mode`, rather than returning nothing or pretending the weaker result.
 """
 
+import calendar
 import logging
 import time
 import uuid
 from collections.abc import Iterator
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from app.adapters.embeddings.local import get_embedder
@@ -55,6 +56,7 @@ from app.services.context_slots import (
     shelf_called_for,
     stated_dates,
     stated_money,
+    stated_month,
     stated_place,
     states_only_ceiling,
     wearer_implied,
@@ -410,6 +412,18 @@ def recommend_events(
     if ctx.start_date and not stated_dates(payload.query) and not has_date_answers(payload.answers):
         structured = structured.model_copy(update={"context": ctx.model_copy(
             update={"start_date": None, "end_date": None, "duration_days": None})})
+
+    # The month the shopper named wins over the model's. Live, qwen3:8b read
+    # "Shimla in January" as 29 Sep - 31 Dec 2026, a 90-day trip starting today.
+    ctx = structured.context
+    month = stated_month(payload.query)
+    if month and ctx.start_date and ctx.start_date.month != month:
+        year = today.year if month >= today.month else today.year + 1
+        start = date(year, month, 1)
+        month_days = calendar.monthrange(year, month)[1]
+        days = ctx.duration_days if ctx.duration_days and ctx.duration_days <= month_days else month_days
+        structured = structured.model_copy(update={"context": ctx.model_copy(update={
+            "start_date": start, "end_date": start + timedelta(days=days - 1), "duration_days": days})})
 
     # A trip is planned ahead, so a date already past means the model picked
     # the wrong year. Live, qwen3:8b read "Leh ... in January" on 29 Sep 2026

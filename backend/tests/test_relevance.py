@@ -685,3 +685,31 @@ def test_hinglish_budget_and_relations_are_understood(catalogue):
     response = _response(catalogue, "bhai ki shaadi ke liye kurta chahiye, 3000 tak", _Kurta())
     assert _budget(response) == ("Under ₹3,000", "known")
     assert not any(v.name == "gender" and v.status == "needed" for v in response.context_variables)
+
+
+def test_the_named_month_wins_over_the_models_dates(catalogue):
+    """Live, qwen3:8b on 29 Sep 2026: "Shimla in January" became 29 Sep - 31
+    Dec 2026, a 90-day trip starting today, shown as the shopper's dates."""
+    class _WrongMonth:
+        name = "i"
+        is_real = True
+
+        def structured(self, **_):
+            return {"intent_summary": "A jacket for Shimla.", "is_shopping_request": True,
+                    "buckets": [{"name": "Jacket", "search_phrases": ["winter jacket"], "why_needed": "x",
+                                 "role": "required", "catalogue_paths": ["Men's Apparel/Jackets & Coats"]}],
+                    "context": {"location": "Shimla, Himachal Pradesh", "start_date": "2026-09-29",
+                                "end_date": "2026-12-31", "duration_days": 90},
+                    "assumptions": []}
+
+    response = _response(catalogue, "women's winter jacket for Shimla in January", _WrongMonth(),
+                         skip_clarification=True)
+    assert (str(response.context.start_date), str(response.context.end_date)) == ("2027-01-01", "2027-01-31")
+
+
+def test_may_the_verb_is_not_a_month():
+    from app.services.context_slots import stated_month
+
+    assert stated_month("I may need a jacket") is None
+    assert stated_month("a trip in May") == 5
+    assert stated_month("Leh for 10 days in January") == 1

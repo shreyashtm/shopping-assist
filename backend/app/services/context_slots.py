@@ -113,6 +113,31 @@ _APPAREL_HINTS = (
 _GIFT_HINTS = ("gift", "present", "anniversary", "hamper")
 
 
+_MONTH_NUMBERS = {
+    name: number
+    for number, names in enumerate(
+        [("january", "jan"), ("february", "feb"), ("march", "mar"), ("april", "apr"),
+         ("may",), ("june", "jun"), ("july", "jul"), ("august", "aug"),
+         ("september", "sep", "sept"), ("october", "oct"), ("november", "nov"),
+         ("december", "dec")],
+        start=1,
+    )
+    for name in names
+}
+# "may" is usually the verb, so it counts only after a word that introduces a month.
+_MONTH_NAMED = re.compile(
+    r"\b(january|jan|february|feb|march|mar|april|apr|june|jun|july|jul|august|aug"
+    r"|september|sept|sep|october|oct|november|nov|december|dec)\b"
+    r"|\b(?:in|this|next|early|mid|late|end of|of)\s+(may)\b"
+)
+
+
+def stated_month(text: str) -> int | None:
+    """The first month the shopper's words name, as a number."""
+    m = _MONTH_NAMED.search(text.lower())
+    return _MONTH_NUMBERS[m.group(1) or m.group(2)] if m else None
+
+
 def stated_dates(text: str) -> bool:
     """Whether the shopper's own words name a date or a time frame."""
     return bool(_STATED_DATES.search(text.lower()))
