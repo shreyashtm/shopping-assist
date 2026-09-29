@@ -19,6 +19,8 @@ not be answered with a guess.
 """
 
 import logging
+import re
+import unicodedata
 from datetime import date, timedelta
 from typing import Any
 
@@ -26,7 +28,7 @@ from pydantic import ValidationError
 
 from app.adapters.llm.base import LLMProvider, LLMUnavailable
 from app.schemas.query import StructuredQuery
-from app.services.taxonomy import OCCASIONS
+from app.services.taxonomy import ALL_PATHS, OCCASIONS, PRODUCT_TAXONOMY
 
 logger = logging.getLogger(__name__)
 
@@ -421,6 +423,34 @@ def build_user_prompt(
     return "\n".join(parts)
 
 
+def _path_key(path: str) -> str:
+    """Formatting-insensitive form of a shelf path or category name.
+
+    A model writes the same shelf many ways -- "Men’s Apparel" with a curly
+    apostrophe, lower case, "and" for "&", spaces around "/" -- and retrieval
+    compares paths exactly, so any of them gated out every product. Live, a
+    Leh trek asking for thermals and socks intermittently came back "Nothing
+    in the catalogue fits" while dozens of both were in budget.
+    """
+    text = unicodedata.normalize("NFKC", path).replace("’", "'").replace("‘", "'")
+    text = re.sub(r"\s+and\s+", " & ", text.lower())
+    text = re.sub(r"\s*/\s*", "/", text)
+    return re.sub(r"\s+", " ", text).strip(" /")
+
+
+_CANONICAL_PATHS = {_path_key(p): p for p in [*ALL_PATHS, *PRODUCT_TAXONOMY]}
+
+
+def _canonical_path(path: str) -> str:
+    """The catalogue's exact spelling of a path, or the input unchanged when it
+    names nothing in the catalogue (retrieval then reports the slot as
+    unmapped rather than silently matching something else)."""
+    found = _CANONICAL_PATHS.get(_path_key(path))
+    if found is None:
+        logger.warning("Model named a shelf that is not in the catalogue: %r", path)
+    return found or path
+
+
 _ROLE_RANK = {"required": 0, "recommended": 1, "optional": 2}
 
 
@@ -480,6 +510,11 @@ def interpret(
             f"{model} returned a plan that failed validation "
             f"({exc.error_count()} error(s))"
         ) from exc
+    for bucket in structured.buckets:
+        bucket.catalogue_paths = list(dict.fromkeys(_canonical_path(p) for p in bucket.catalogue_paths))
+    structured.filters.categories = list(
+        dict.fromkeys(_canonical_path(c) for c in structured.filters.categories)
+    )
     structured.buckets = _merge_same_name_buckets(structured.buckets)
 
     # The model can emit a natural-language gender word ("neutral") that

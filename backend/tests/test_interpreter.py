@@ -317,3 +317,33 @@ def test_buckets_sharing_a_name_are_merged():
     assert merged.search_phrases == ["running shoes", "hiking boots"]
     assert merged.catalogue_paths == ["Footwear/Sports Shoes", "Footwear/Boots"]
     assert merged.role == "required"
+
+
+# Live, with the model path: "a trek near Leh ... thermals and warm socks,
+# budget 3000" intermittently came back "Nothing in the catalogue fits",
+# although 34 men's thermals and dozens of socks were in budget. Shelf paths
+# were compared character for character, and a curly apostrophe, lower case,
+# "and" for "&" or spaces around "/" each gated out every product.
+
+PATH_VARIANTS = [
+    "Men’s Apparel/Thermals & Base Layers",
+    "men's apparel/thermals & base layers",
+    "Men's Apparel/Thermals and Base Layers",
+    "Men's Apparel / Thermals & Base Layers",
+]
+
+
+@pytest.mark.parametrize("variant", PATH_VARIANTS)
+def test_model_shelf_paths_are_mapped_to_the_real_catalogue_path(variant):
+    bucket = {**_BASE_PAYLOAD["buckets"][0], "catalogue_paths": [variant]}
+    payload = {**_BASE_PAYLOAD, "buckets": [bucket],
+               "filters": {**_BASE_PAYLOAD["filters"], "categories": [variant, "men’s apparel"]}}
+    structured = interpret(_FixedProvider(payload), "any-model", "thermals", date(2026, 9, 29))
+    assert structured.buckets[0].catalogue_paths == ["Men's Apparel/Thermals & Base Layers"]
+    assert structured.filters.categories == ["Men's Apparel/Thermals & Base Layers", "Men's Apparel"]
+
+
+def test_an_unknown_path_is_left_for_retrieval_to_report():
+    bucket = {**_BASE_PAYLOAD["buckets"][0], "catalogue_paths": ["Snowshoes/Carbon"]}
+    structured = interpret(_FixedProvider({**_BASE_PAYLOAD, "buckets": [bucket]}), "m", "x", date(2026, 9, 29))
+    assert structured.buckets[0].catalogue_paths == ["Snowshoes/Carbon"]

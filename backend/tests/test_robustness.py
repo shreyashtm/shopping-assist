@@ -313,3 +313,20 @@ def test_a_model_decline_with_no_buckets_is_answered_politely(catalogue):
     assert response.meta.degraded_mode is False
     assert response.groups == []
     assert "doesn't look like a shopping request" in response.intent_summary
+
+
+def test_a_slot_whose_shelves_do_not_exist_says_so(catalogue):
+    """An unmappable path used to read "nothing in stock matched closely
+    enough", blaming stock for what was a planning error."""
+    plan = {
+        "intent_summary": "Snowshoes.", "is_shopping_request": True,
+        "buckets": [{"name": "Snowshoes", "search_phrases": ["snowshoes"], "why_needed": "x",
+                     "role": "required", "catalogue_paths": ["Snowshoes/Carbon"]}],
+        "filters": {}, "context": {}, "assumptions": [],
+    }
+    response = recommend(
+        RecommendRequest(query="carbon snowshoes please", skip_clarification=True),
+        catalogue, _CannedProvider(plan), today=TODAY,
+    )
+    reason = next(u.reason for u in response.unfilled_slots if u.name == "Snowshoes")
+    assert "matched closely enough" not in reason

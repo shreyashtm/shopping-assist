@@ -62,6 +62,7 @@ from app.services.retrieval import (
     sanitize_categories,
     search_bucket,
 )
+from app.services.taxonomy import ALL_PATHS
 
 logger = logging.getLogger(__name__)
 
@@ -494,6 +495,9 @@ def recommend_events(
             continue
         if not bucket.catalogue_paths:
             reason = "this catalogue doesn't stock that type of product yet"
+        elif not any(path in ALL_PATHS for path in bucket.catalogue_paths):
+            # A planning error, not a stock gap: the shelves named do not exist.
+            reason = "couldn't match this to a section of the catalogue"
         else:
             reason = "nothing in stock matched closely enough"
         unfilled.append(
