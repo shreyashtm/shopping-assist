@@ -351,7 +351,7 @@ def passes_filters(product: Product, filters: QueryFilters) -> bool:
 _GATED_OCCASIONS = {"wedding", "anniversary", "birthday", "festive", "interview"}
 
 
-def passes_occasion_context(product: Product, bucket: Bucket) -> bool:
+def passes_occasion_context(product: Product, bucket: Bucket, request_text: str = "") -> bool:
     """Reject explicit occasion conflicts for occasion-specific buckets.
 
     Product type gating alone is insufficient for a sparse archive catalogue:
@@ -362,8 +362,12 @@ def passes_occasion_context(product: Product, bucket: Bucket) -> bool:
     eligible either way, because missing evidence is not evidence of a
     conflict.
     """
+    # The shopper's own words count as well as the bucket's: the occasion
+    # belongs to the whole request. Live, a model-planned "Beauty Gift
+    # Hampers" group for "a birthday gift for my wife" never said "birthday",
+    # so this check never ran for it and a "Bhaiya Bhabhi" hamper was shown.
     bucket_text = " ".join(
-        [bucket.name, bucket.why_needed, *bucket.search_phrases]
+        [bucket.name, bucket.why_needed, *bucket.search_phrases, request_text]
     ).lower()
     # A wedding anniversary is an anniversary. Read as "wedding", the plan's
     # "25th wedding anniversary" sent a request through the wedding rule below,
@@ -746,6 +750,7 @@ def search_bucket(
     context: ResolvedContext,
     limit: int,
     constraints: ContextConstraints | None = None,
+    request_text: str = "",
 ) -> list[ScoredProduct]:
     """Return the best candidates for one bucket.
 
@@ -782,7 +787,7 @@ def search_bucket(
             continue
         if not passes_filters(product, bucket_filters):
             continue
-        if not passes_occasion_context(product, bucket):
+        if not passes_occasion_context(product, bucket, request_text):
             continue
         if suitability.evaluate(product, constraints).hard_mismatch:
             continue

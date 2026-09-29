@@ -489,6 +489,7 @@ def recommend_events(
             structured.context,
             limit=settings.candidates_per_bucket,
             constraints=constraints,
+            request_text=payload.query,
         )
 
     per_bucket = dedupe_across_buckets(per_bucket)

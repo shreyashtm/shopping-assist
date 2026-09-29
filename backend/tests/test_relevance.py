@@ -346,3 +346,39 @@ def test_a_group_offers_a_real_choice_even_when_one_item_is_planned(catalogue):
                                           skip_clarification=True),
                          catalogue, plan, today=date(2026, 9, 29))
     assert all(len(g.items) >= 3 for g in response.groups), [(g.name, len(g.items)) for g in response.groups]
+
+
+def test_the_requests_occasion_applies_to_every_group_on_the_model_path(catalogue):
+    """Live, with the model path: "a birthday gift for my wife, she loves
+    perfumes and skincare" was planned with a "Beauty Gift Hampers" group whose
+    own text never said "birthday", so the occasion check never ran for it and
+    a "Bhaiya Bhabhi" (brother and sister-in-law) hamper was shown. The
+    perfume group came back empty: every unisex perfume gift set was tagged
+    only for anniversaries and weddings. This mirrors the logged plan."""
+    class _LoggedPlan:
+        name = "plan"
+        is_real = True
+
+        def structured(self, **_):
+            def b(name, path, why):
+                return {"name": name, "search_phrases": [name.lower()], "why_needed": why,
+                        "role": "recommended", "catalogue_paths": [path], "max_items": 3}
+            return {
+                "intent_summary": "A gift for a wife who loves perfumes and skincare.",
+                "is_shopping_request": True,
+                "buckets": [b("Fragrance & Perfumes", "Beauty & Personal Care/Fragrance", "She loves perfumes."),
+                            b("Beauty Gift Hampers", "Gifting/Hampers", "A pampering set for her.")],
+                "filters": {"price_max": 10000, "gender": "women",
+                            "categories": ["Beauty & Personal Care", "Gifting"]},
+                "context": {}, "assumptions": [],
+            }
+
+    response_cache.clear()
+    response = recommend(
+        RecommendRequest(query="a birthday gift for my wife, she loves perfumes and skincare",
+                         skip_clarification=True),
+        catalogue, _LoggedPlan(), today=date(2026, 9, 29))
+    groups = {g.name: g.items for g in response.groups}
+    titles = [i.product.title for items in groups.values() for i in items]
+    assert not any("Bhaiya" in t for t in titles), titles
+    assert groups.get("Fragrance & Perfumes"), list(groups)

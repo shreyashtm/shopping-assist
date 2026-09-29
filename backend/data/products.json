@@ -5375,7 +5375,8 @@
       ],
       "occasion": [
         "anniversary",
-        "wedding"
+        "wedding",
+        "birthday"
       ],
       "material": null,
       "temp_rating_c": null,
@@ -5408,7 +5409,8 @@
         "gifting"
       ],
       "occasion": [
-        "anniversary"
+        "anniversary",
+        "birthday"
       ],
       "material": null,
       "temp_rating_c": null,
@@ -5442,7 +5444,8 @@
       ],
       "occasion": [
         "anniversary",
-        "wedding"
+        "wedding",
+        "birthday"
       ],
       "material": null,
       "temp_rating_c": null,
@@ -5476,7 +5479,8 @@
         "travel"
       ],
       "occasion": [
-        "anniversary"
+        "anniversary",
+        "birthday"
       ],
       "material": null,
       "temp_rating_c": null,
