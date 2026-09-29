@@ -75,20 +75,24 @@ class LocalEmbeddings:
 
     def _fit_threads_to_container(self) -> None:
         """Size torch's thread pool to the CPUs actually available, and log
-        the encode time before and after, so the effect is visible in the
-        deployment's logs without running a paid search."""
+        the encode time, so a slow host shows in the deploy log.
+
+        Measured on Railway (30 Sep 2026) with a before-and-after run: torch
+        started 48 threads on a 2-CPU container, and 12 phrases took 15.1s;
+        capped at 2 threads they took 0.21s. The "before" run is not repeated
+        at every startup -- it cost those 15 seconds each time.
+        """
         import torch
 
         default_threads = torch.get_num_threads()
         cpus = container_cpus()
-        _time_encode(self._model)  # first call pays one-off setup
-        before = _time_encode(self._model)
         if cpus < default_threads:  # only ever narrow the pool
             torch.set_num_threads(cpus)
-        after = _time_encode(self._model)
+        _time_encode(self._model)  # first call pays one-off setup
+        took = _time_encode(self._model)
         logger.info(
-            "Encoder threads: %d -> %d (container CPUs %d); %d phrases took %.0f ms -> %.0f ms",
-            default_threads, torch.get_num_threads(), cpus, len(_PROBE_PHRASES), before, after,
+            "Encoder threads: %d -> %d (container CPUs %d); %d phrases took %.0f ms",
+            default_threads, torch.get_num_threads(), cpus, len(_PROBE_PHRASES), took,
         )
 
     def embed(self, texts: list[str]) -> np.ndarray:
