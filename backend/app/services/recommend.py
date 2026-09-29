@@ -71,7 +71,7 @@ from app.services.interpreter import (
     merge_answers,
     offline_interpret,
 )
-from app.services.offline import _plain_summary, stated_filters
+from app.services.offline import _plain_summary, _stated_recipient, stated_filters
 from app.services.retrieval import (
     ScoredProduct,
     dedupe_across_buckets,
@@ -433,6 +433,15 @@ def recommend_events(
 
     # The month the shopper named wins over the model's. Live, qwen3:8b read
     # "Shimla in January" as 29 Sep - 31 Dec 2026, a 90-day trip starting today.
+    # A recipient the shopper named is known even when the model left the
+    # field empty. Live, "something nice for my girlfriend" showed
+    # "Recipient · needed".
+    if not structured.context.recipient:
+        named = _stated_recipient(payload.query.lower())
+        if named:
+            structured = structured.model_copy(update={
+                "context": structured.context.model_copy(update={"recipient": named})})
+
     # The heading is spoken to the shopper. Live, qwen3:8b wrote "The user
     # needs new clothes, but the request is too generic", a note about the
     # request, and it became the page heading; the shopper's words replace it.

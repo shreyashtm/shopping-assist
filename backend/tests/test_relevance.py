@@ -798,3 +798,10 @@ def test_a_gift_that_is_worn_still_asks_who_wears_it(catalogue):
               "catalogue_paths": ["Men's Apparel/Casual Shirts"]}]
     response = _response(catalogue, "a shirt as a gift", _asks_about_gifts(shirt))
     assert "Who is this for?" in [q.question for q in (response.questions or [])]
+
+
+def test_a_named_recipient_is_known_even_when_the_model_omits_it(catalogue):
+    """Live: "something nice for my girlfriend" showed "Recipient · needed"."""
+    response = _response(catalogue, "something nice for my girlfriend", _fills_in(None, "women"),
+                         skip_clarification=True)
+    assert response.context.recipient == "girlfriend"
