@@ -456,7 +456,11 @@ def recommend_events(
     if not ctx.location and ctx.climate_note:
         structured = structured.model_copy(update={"context": ctx.model_copy(update={"climate_note": None})})
     filters = structured.filters
-    if (filters.gender or "").lower() in {"unisex", "both"} and not stated_wearer(payload.query):
+    # Only a real wearer narrows the search; "unspecified", "both" or
+    # "unisex" the shopper never said is filler shown as their own words.
+    gender = (filters.gender or "").lower()
+    if (gender and gender not in {"men", "women", "kids"} and not stated_wearer(payload.query)
+            and "unisex" not in payload.query.lower()):
         structured = structured.model_copy(update={"filters": filters.model_copy(update={"gender": None})})
 
     if payload.answers:

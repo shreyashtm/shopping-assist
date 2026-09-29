@@ -271,8 +271,22 @@ def _has_budget(structured: StructuredQuery, answered: set[str]) -> bool:
     )
 
 
+# A recipient word that already says who the wearer is. Live, "a birthday
+# gift for my 10 year old nephew" was asked "What gender is your nephew?".
+_GENDERED_RECIPIENT = re.compile(
+    r"\b(nephew|niece|son|daughter|brother|sister|wife|husband|mom|mother|mum|dad|father"
+    r"|grandson|granddaughter|grandfather|grandmother|grandpa|grandma|uncle|aunt"
+    r"|boyfriend|girlfriend|boy|girl|man|woman)s?\b"
+)
+
+
 def _has_gender(structured: StructuredQuery, answered: set[str]) -> bool:
-    return bool(structured.filters.gender or "gender" in answered)
+    recipient = (structured.context.recipient or "").lower()
+    return bool(
+        structured.filters.gender
+        or "gender" in answered
+        or _GENDERED_RECIPIENT.search(recipient)
+    )
 
 
 # Words that name an actual occasion or setting. Deliberately not "everyday",
@@ -389,7 +403,7 @@ def build_context_variables(
                 label="For",
                 status="known",
                 source="user",
-                value=structured.filters.gender or "unspecified",
+                value=structured.filters.gender or structured.context.recipient or "unspecified",
             )
         )
     elif _implies_apparel(text) and not _is_specific_trip(structured):

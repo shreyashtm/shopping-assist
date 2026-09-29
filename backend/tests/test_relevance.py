@@ -511,13 +511,13 @@ def test_a_place_and_wearer_the_shopper_never_gave_are_not_shown(catalogue):
     """Live, qwen3:8b: "Place · India (inferred)" with "add a date for India"
     for "something warm for winter", "N/A (no location provided)" as a page
     heading, and "For · unisex (you)" though nobody said so."""
-    for location in ("India", "N/A (no location provided)"):
-        response = _response(catalogue, "something warm for winter", _fills_in(location, "unisex"),
+    for location, gender in (("India", "unisex"), ("N/A (no location provided)", "unspecified")):
+        response = _response(catalogue, "something warm for winter", _fills_in(location, gender),
                              skip_clarification=True)
         shown = {v.name: (v.value, v.status) for v in response.context_variables}
         assert response.context.location is None, location
         assert response.context.climate_note is None, "a model-written climate with no place behind it"
-        assert shown.get("gender", (None, None))[0] != "unisex"
+        assert shown.get("gender", (None, None))[0] != gender, gender
 
 
 def test_a_place_and_wearer_the_shopper_did_give_are_kept(catalogue):
@@ -552,3 +552,27 @@ def test_a_trip_length_is_not_a_budget(catalogue):
     response = _response(catalogue, "wool socks for 10 days in January", _invents_budget(1000, 20000),
                          skip_clarification=True)
     assert _budget(response) == (None, "needed")
+
+
+def test_a_gendered_recipient_is_not_asked_their_gender(catalogue):
+    """Live: "a birthday gift for my 10 year old nephew" was asked "What
+    gender is your nephew?"."""
+    class _AsksGender:
+        name = "i"
+        is_real = True
+
+        def structured(self, **_):
+            return {"intent_summary": "A birthday gift for a nephew.", "is_shopping_request": True,
+                    "buckets": [{"name": "Gifts", "search_phrases": ["gift"], "why_needed": "x",
+                                 "role": "required", "catalogue_paths": ["Gifting/Hampers"]}],
+                    "context": {"recipient": "nephew"},
+                    "needs_clarification": True,
+                    "questions": [{"slot": "gender", "question": "What gender is your nephew?", "options": [
+                        {"label": "Boy", "value": "gender:men"}, {"label": "Girl", "value": "gender:women"}]}],
+                    "assumptions": []}
+
+    response = _response(catalogue, "birthday gift for my 10 year old nephew", _AsksGender())
+    asked = [q.question for q in (response.questions or [])]
+    assert not any("gender" in q.lower() for q in asked), asked
+    shown = {v.name: v.value for v in response.context_variables}
+    assert shown.get("gender") != "unspecified"
