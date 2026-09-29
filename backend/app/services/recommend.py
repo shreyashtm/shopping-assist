@@ -480,11 +480,17 @@ def recommend_events(
     # A recipient the shopper named is known even when the model left the
     # field empty. Live, "something nice for my girlfriend" showed
     # "Recipient · needed".
-    if not structured.context.recipient:
-        named = _stated_recipient(payload.query.lower())
-        if named:
-            structured = structured.model_copy(update={
-                "context": structured.context.model_copy(update={"recipient": named})})
+    # And the shopper's named recipient wins over the model's: live, the same
+    # request showed "Recipient · self (you)". "Self" is nobody to buy for.
+    recipient = structured.context.recipient
+    named = _stated_recipient(payload.query.lower())
+    if recipient and recipient.strip().lower() in {"self", "me", "myself", "user", "the user", "yourself"}:
+        recipient = None
+    if named and (not recipient or recipient.lower() not in payload.query.lower()):
+        recipient = named
+    if recipient != structured.context.recipient:
+        structured = structured.model_copy(update={
+            "context": structured.context.model_copy(update={"recipient": recipient})})
 
     # The heading is spoken to the shopper. Live, qwen3:8b wrote "The user
     # needs new clothes, but the request is too generic", a note about the

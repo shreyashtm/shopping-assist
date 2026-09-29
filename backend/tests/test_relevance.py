@@ -807,6 +807,24 @@ def test_a_named_recipient_is_known_even_when_the_model_omits_it(catalogue):
     assert response.context.recipient == "girlfriend"
 
 
+def test_the_named_recipient_wins_over_the_models(catalogue):
+    """Live: "something nice for my girlfriend" showed "Recipient · self"."""
+    class _Self:
+        name = "i"
+        is_real = True
+
+        def structured(self, **_):
+            return {"intent_summary": "A gift.", "is_shopping_request": True,
+                    "buckets": [{"name": "Gifts", "search_phrases": ["gift"], "why_needed": "x",
+                                 "role": "recommended", "catalogue_paths": ["Gifting/Hampers"]}],
+                    "context": {"recipient": "self"}, "assumptions": []}
+
+    response = _response(catalogue, "something nice for my girlfriend", _Self(), skip_clarification=True)
+    assert response.context.recipient == "girlfriend"
+    response = _response(catalogue, "a warm jacket", _Self(), skip_clarification=True)
+    assert response.context.recipient is None
+
+
 class _CountingPlanner:
     """A different plan on every call, so a replan is visible."""
     name = "c"
