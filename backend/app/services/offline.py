@@ -41,7 +41,8 @@ _ROUTES: list[tuple[tuple[str, ...], str, list[str], str]] = [
         "trekking gear for cold weather",
     ),
     (
-        ("wedding", "sherwani", "saree", "lehenga", "kurta", "kurti", "ethnic", "festive"),
+        ("traditional wear", "traditional", "wedding", "sherwani", "saree", "lehenga", "kurta",
+         "kurti", "ethnic", "festive"),
         "Traditional Wear",
         [
             "Ethnic Wear/Sherwanis", "Ethnic Wear/Kurta Sets",

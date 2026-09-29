@@ -198,3 +198,12 @@ def test_gift_as_context_does_not_open_a_gift_group():
 def test_headings_keep_the_shoppers_casing_and_drop_lead_ins():
     b = build_offline_query("Need a warm Jacket for Manali", []).buckets[0]
     assert b.why_needed == "You asked for “a warm Jacket”."
+
+
+def test_traditional_wear_heading_quotes_the_garment_not_the_occasion():
+    """Live: "Find me good traditional wear for my friend's wedding" was
+    headed "You asked for “friend's wedding in Mumbai”"."""
+    b = build_offline_query("Find me good traditional wear for my friend's wedding in Mumbai "
+                            "this December, I'm a woman, budget under 2000", []).buckets[0]
+    assert b.name == "Traditional Wear"
+    assert b.why_needed.startswith("You asked for “good traditional wear”")
