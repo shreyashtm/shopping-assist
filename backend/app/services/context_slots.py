@@ -55,6 +55,27 @@ OCCASION_QUESTION = ClarifyingQuestion(
     ],
 )
 
+# For a trip that names no place: the kind of trip decides what to pack far
+# more than budget or wearer. Live, "help me pack for a trip" was asked only
+# budget and "Who is this for?", and planned eight formal dress shirts.
+TRIP_TYPE_QUESTION = ClarifyingQuestion(
+    slot="trip_type",
+    question="What kind of trip is it?",
+    options=[
+        QuestionOption(label="Beach", value="use_case:beach holiday"),
+        QuestionOption(label="Mountains / trek", value="use_case:trekking"),
+        QuestionOption(label="City break", value="use_case:city travel"),
+        QuestionOption(label="Business", value="occasion:business travel"),
+        QuestionOption(label="Wedding or festival", value="occasion:wedding"),
+    ],
+)
+
+_TRIP_KIND = re.compile(
+    r"\b(beach|mountains?|trek\w*|hik\w*|city|business|work|conference|wedding|festival"
+    r"|snow|ski\w*|camp\w*|safari|cruise|pilgrimage)\b"
+)
+
+
 def _dates_question(today: date) -> ClarifyingQuestion:
     """When the trip is, as a resolvable date range rather than a mood.
 
@@ -435,12 +456,12 @@ def _is_specific_trip(structured: StructuredQuery) -> bool:
 
 
 def build_context_variables(
-    structured: StructuredQuery, answers: list[str]
+    structured: StructuredQuery, answers: list[str], request_text: str = ""
 ) -> list[ContextVariable]:
     """Tag each planning variable with status and provenance."""
     ctx = structured.context
     answered = _answered_keys(answers)
-    text = _text_blob(structured)
+    text = f"{_text_blob(structured)} {request_text.lower()}"
     slots: list[ContextVariable] = []
 
     if ctx.location:
@@ -455,6 +476,12 @@ def build_context_variables(
         )
     elif _implies_trek(text):
         slots.append(ContextVariable(name="location", label="Place", status="needed"))
+    elif (
+        any(token in text for token in _TRIP_HINTS)
+        and not _TRIP_KIND.search(text)
+        and not {"use_case", "occasion"} & answered
+    ):
+        slots.append(ContextVariable(name="trip_type", label="Trip", status="needed"))
 
     if ctx.start_date:
         date_label = ctx.start_date.isoformat()
@@ -573,7 +600,7 @@ def _budget_label(structured: StructuredQuery) -> str:
 # at all, so every temperature-sensitive boost and penalty stays dark. These
 # are asked ahead of model-generated questions, which compete for the same
 # four-question budget.
-_BLOCKING_SLOTS = frozenset({"dates"})
+_BLOCKING_SLOTS = frozenset({"dates", "trip_type"})
 
 
 def _question_for_slot(name: str, today: date) -> ClarifyingQuestion | None:
@@ -582,6 +609,7 @@ def _question_for_slot(name: str, today: date) -> ClarifyingQuestion | None:
         "gender": GENDER_QUESTION,
         "occasion": OCCASION_QUESTION,
         "dates": _dates_question(today),
+        "trip_type": TRIP_TYPE_QUESTION,
     }.get(name)
 
 
@@ -611,11 +639,14 @@ def is_specific_trip(structured: StructuredQuery) -> bool:
 
 
 def apply_context_audit(
-    structured: StructuredQuery, answers: list[str], today: date | None = None
+    structured: StructuredQuery,
+    answers: list[str],
+    today: date | None = None,
+    request_text: str = "",
 ) -> tuple[StructuredQuery, list[ContextVariable]]:
     """Fill context slots and append deterministic questions for gaps."""
     today = today or date.today()
-    slots = build_context_variables(structured, answers)
+    slots = build_context_variables(structured, answers, request_text)
     answered = _answered_keys(answers)
     text = _text_blob(structured)
 

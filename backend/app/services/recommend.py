@@ -161,11 +161,11 @@ _ABOUT_THE_REQUEST = re.compile(
 # without another model call. Same lifetime as cached responses.
 plan_cache = ResponseCache()
 
-# Answers merge_answers() can apply to an existing plan. Anything else (a
-# gift type, a category) changes what to search, so it needs a fresh plan.
+# Answers merge_answers() can apply to an existing plan: they narrow it.
+# Anything else changes what to search -- a gift type, or an occasion or kind
+# of trip ("beach" and "trek" need different shelves) -- so it needs a fresh plan.
 _PLAN_PRESERVING_KEYS = frozenset({
-    "price_min", "price_max", "budget", "gender", "occasion", "use_case",
-    "start_date", "duration_days", "timing",
+    "price_min", "price_max", "budget", "gender", "start_date", "duration_days", "timing",
 })
 
 
@@ -612,7 +612,15 @@ def recommend_events(
     )
     notes.extend(climate_notes)
 
-    structured, context_variables = apply_context_audit(structured, payload.answers, today)
+    structured, context_variables = apply_context_audit(
+        structured, payload.answers, today, request_text=payload.query
+    )
+    # A recipient is only missing when there is a gift. Live, "help me pack
+    # for a trip" showed "Recipient · needed" because the model assumed gifts.
+    if not _GIFT_REQUEST.search(" ".join([payload.query, *payload.answers])):
+        context_variables = [
+            v for v in context_variables if not (v.name == "recipient" and v.status == "needed")
+        ]
 
     # Budget chips are checked against real catalogue prices here rather than
     # inside interpret(), because this is where the two sources of questions
@@ -796,6 +804,10 @@ def recommend_events(
         preview_names = {b.name for b in preview_buckets} | ({FAMILY_GIFTS.name} & shown.keys())
         preview_groups = [g for g in groups if g.name in preview_names]
         preview_unfilled = [u for u in unfilled if u.name in preview_names]
+        # Until the kind of trip is known, any product is a guess -- live,
+        # "help me pack for a trip" showed eight formal dress shirts. Ask first.
+        if any(q.slot == "trip_type" for q in structured.questions):
+            preview_groups, preview_unfilled = [], []
         yield "result", _cache_and_return(key, RecommendResponse(
             query_id=str(uuid.uuid4()),
             mode="clarify",

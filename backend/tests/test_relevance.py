@@ -865,3 +865,36 @@ def test_an_answer_that_changes_what_to_search_replans(catalogue):
     _response(catalogue, query, planner)
     _response(catalogue, query, planner, answers=["category:Watches & Jewellery"])
     assert planner.calls == 2
+
+
+def test_a_trip_with_no_place_asks_what_kind_of_trip(catalogue):
+    """Live: "help me pack for a trip" asked budget and "Who is this for?",
+    planned eight formal dress shirts, and showed "Recipient · needed"."""
+    class _Packing:
+        name = "i"
+        is_real = True
+
+        def structured(self, **_):
+            return {"intent_summary": "Packing for a trip.", "is_shopping_request": True,
+                    "buckets": [{"name": "Clothing", "search_phrases": ["shirt"], "why_needed": "x",
+                                 "role": "recommended", "catalogue_paths": ["Men's Apparel/Formal Shirts"]},
+                                {"name": "Gifts", "search_phrases": ["gift for the host"], "why_needed": "x",
+                                 "role": "optional", "catalogue_paths": ["Gifting/Hampers"]}],
+                    "assumptions": []}
+
+    response = _response(catalogue, "help me pack for a trip", _Packing())
+    asked = [q.question for q in (response.questions or [])]
+    assert asked and asked[0] == "What kind of trip is it?"
+    assert not response.groups, "products before the kind of trip is known are guesses"
+    assert not any(v.name == "recipient" and v.status == "needed" for v in response.context_variables)
+
+    beach = _response(catalogue, "help me pack for a beach holiday", _Packing())
+    assert "What kind of trip is it?" not in [q.question for q in (beach.questions or [])]
+
+
+def test_a_kind_of_trip_answer_replans(catalogue):
+    planner = _CountingPlanner()
+    query = "help me pack for a trip"
+    _response(catalogue, query, planner)
+    _response(catalogue, query, planner, answers=["use_case:beach holiday"])
+    assert planner.calls == 2
