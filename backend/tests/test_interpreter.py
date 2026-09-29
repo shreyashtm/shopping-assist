@@ -285,10 +285,13 @@ def test_a_wrong_shape_plan_is_a_model_failure_not_a_crash():
         interpret(provider, "any-model", "a jacket", date(2026, 8, 25))
 
 
-def test_a_shopping_plan_with_no_buckets_is_still_rejected():
+def test_a_shopping_plan_with_no_buckets_gets_keyword_groups():
+    """The rest of the plan is sound; rejecting it sent "gift ideas" to
+    keyword mode. The keyword router supplies the groups instead."""
     provider = _FixedProvider({**_BASE_PAYLOAD, "buckets": []})
-    with pytest.raises(LLMUnavailable):
-        interpret(provider, "any-model", "a jacket", date(2026, 8, 25))
+    structured = interpret(provider, "any-model", "a jacket", date(2026, 8, 25))
+    assert structured.buckets
+    assert structured.intent_summary == _BASE_PAYLOAD["intent_summary"]
 
 
 def test_a_declined_request_may_have_no_buckets():

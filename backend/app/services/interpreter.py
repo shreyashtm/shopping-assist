@@ -515,6 +515,15 @@ def interpret(
         timeout_s=timeout_s,
         effort=effort,
     )
+    # A shopping plan with no groups is otherwise sound: the model read the
+    # request and wrote questions, it just planned nothing to search. Live,
+    # qwen3:8b did this for "gift ideas", and rejecting the whole plan sent
+    # the search to keyword mode. The keyword router supplies the groups;
+    # the model's reading and questions are kept.
+    if isinstance(payload, dict) and payload.get("is_shopping_request", True) and not payload.get("buckets"):
+        payload = {**payload, "buckets": [
+            b.model_dump() for b in offline_interpret(query, answers or []).buckets
+        ]}
     # Valid JSON is not necessarily a valid plan: free models routed through
     # OpenRouter do not enforce the response schema, and a wrong shape used to
     # escape as an HTTP 500. It is a model failure like any other, so it
@@ -522,8 +531,10 @@ def interpret(
     try:
         structured = StructuredQuery.model_validate(payload)
     except ValidationError as exc:
+        # Named by the configured primary; with a fallback chain the plan
+        # may have come from a later model.
         raise LLMUnavailable(
-            f"{model} returned a plan that failed validation "
+            f"the plan (primary model {model}) failed validation "
             f"({exc.error_count()} error(s))"
         ) from exc
     for bucket in structured.buckets:

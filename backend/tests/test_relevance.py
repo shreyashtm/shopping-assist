@@ -784,6 +784,15 @@ def test_a_general_gift_request_leaves_out_clothes(catalogue):
     assert "Fashion" in {g.name for g in answered.groups}
 
 
+def test_a_plan_with_no_groups_keeps_the_ai_reading(catalogue):
+    """Live: qwen3:8b answered "gift ideas" with questions and no groups; the
+    schema rejected the whole plan and the search dropped to keyword mode."""
+    response = _response(catalogue, "gift ideas", _asks_about_gifts([]))
+    assert not response.meta.degraded_mode
+    assert response.groups
+    assert "Roughly what budget?" in [q.question for q in (response.questions or [])]
+
+
 def test_a_gift_that_is_worn_still_asks_who_wears_it(catalogue):
     shirt = [{"name": "Shirts", "search_phrases": ["shirt"], "why_needed": "x", "role": "required",
               "catalogue_paths": ["Men's Apparel/Casual Shirts"]}]
