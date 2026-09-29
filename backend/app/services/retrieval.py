@@ -358,6 +358,11 @@ def passes_occasion_context(product: Product, bucket: Bucket) -> bool:
     bucket_text = " ".join(
         [bucket.name, bucket.why_needed, *bucket.search_phrases]
     ).lower()
+    # A wedding anniversary is an anniversary. Read as "wedding", the plan's
+    # "25th wedding anniversary" sent a request through the wedding rule below,
+    # which accepts wedding- and festive-tagged products, and a "Bhaiya Bhabhi"
+    # hamper came back for a parents' anniversary.
+    bucket_text = bucket_text.replace("wedding anniversary", "anniversary")
     product_occasions = {occasion.lower() for occasion in product.attributes.occasion}
 
     if "wedding" in bucket_text:

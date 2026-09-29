@@ -1085,3 +1085,27 @@ def test_without_a_floor_nothing_is_reordered():
     cat = _budget_catalogue([(900, [1, 0, 0, 0]), (2500, [1, 0.25, 0, 0])])
     ranked = _search(cat, QueryFilters(price_max=3000))
     assert ranked[0].product.price_inr == 900
+
+
+def test_a_wedding_anniversary_is_an_anniversary_not_a_wedding():
+    """Live, with the model path: the plan said "25th wedding anniversary",
+    the wedding rule accepted any wedding- or festive-tagged product, and a
+    "Bhaiya Bhabhi" (brother and sister-in-law) hamper came back."""
+    bucket = Bucket(name="Anniversary Gift Hamper", search_phrases=["premium hamper"],
+                    why_needed="A hamper for their 25th wedding anniversary.", role="required",
+                    catalogue_paths=["Gifting/Hampers"])
+    wedding_only = make_product("bb", category="Gifting", subcategory="Hampers",
+                                attributes={"occasion": ["festive", "wedding", "everyday"]})
+    anniversary = make_product("ok", category="Gifting", subcategory="Hampers",
+                               attributes={"occasion": ["festive", "anniversary"]})
+    assert not passes_occasion_context(wedding_only, bucket)
+    assert passes_occasion_context(anniversary, bucket)
+
+
+def test_a_real_wedding_still_uses_the_wedding_rule():
+    bucket = Bucket(name="Wedding Outfit", search_phrases=["sherwani"],
+                    why_needed="For my brother's wedding.", role="required",
+                    catalogue_paths=["Ethnic Wear/Sherwanis"])
+    festive = make_product("f", category="Ethnic Wear", subcategory="Sherwanis",
+                           attributes={"occasion": ["festive"]})
+    assert passes_occasion_context(festive, bucket)

@@ -329,7 +329,9 @@ def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
     # words around "hamper" are only "a gift hamper". Dropping it let a
     # "Bhaiya Bhabhi" hamper win, because retrieval's occasion check never
     # saw the word. Other items stay out of each group; only occasions carry.
-    occasions = [o for o in OCCASIONS if o != "everyday" and re.search(rf"\b{o}", text)]
+    # "wedding anniversary" is one occasion, an anniversary.
+    occasion_text = text.replace("wedding anniversary", "anniversary")
+    occasions = [o for o in OCCASIONS if o != "everyday" and re.search(rf"\b{o}", occasion_text)]
 
     # In the order the shopper asked, not the order of this table.
     for start, bucket_name, paths, phrase in sorted(narrowed, key=lambda m: m[0]):

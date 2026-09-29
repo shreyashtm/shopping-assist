@@ -141,3 +141,8 @@ def test_fallback_chips_match_the_main_path():
 def test_a_heading_without_an_article_still_reads_correctly():
     b = build_offline_query("wedding sherwani for my brother", []).buckets[0]
     assert b.why_needed == "You asked for “wedding sherwani”."
+
+
+def test_a_wedding_anniversary_heading_names_one_occasion():
+    b = build_offline_query("a gift hamper for my parents' wedding anniversary", []).buckets[0]
+    assert b.why_needed == "You asked for “a gift hamper”, for an anniversary."
