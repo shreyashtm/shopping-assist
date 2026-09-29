@@ -11,6 +11,7 @@ questions are generated deterministically for `needed` slots so the decision
 does not depend on the model happening to ask.
 """
 
+import re
 from datetime import date, timedelta
 
 from app.core.formatting import indian_grouping
@@ -85,6 +86,24 @@ _TREK_HINTS = ("trek", "hike", "hiking", "mountain", "pass", "expedition", "camp
 # -- while Hampta Pass only worked because "Pass" happens to be a trek hint.
 # Goa in August is monsoon and in December is peak season; the date is what
 # separates them.
+# A request that already names when, or who for. Kept to unambiguous forms:
+# a month name, an ISO date, or a relative phrase ("next week", "in 3 weeks").
+_MONTHS = (
+    "january|february|march|april|may|june|july|august|september|october|november|december"
+    "|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec"
+)
+_STATED_DATES = re.compile(
+    rf"\b({_MONTHS})\b|\b\d{{4}}-\d{{2}}-\d{{2}}\b"
+    r"|\b(next|this|coming) (week|weekend|month)\b|\btomorrow\b"
+    r"|\bin \d+ (days?|weeks?|months?)\b"
+)
+_STATED_WEARER = re.compile(
+    r"\bi'?m an? (man|woman|guy|girl|boy|lady)\b|\bi am an? (man|woman|guy|girl|boy|lady)\b"
+    r"|\b(men|women|mens|womens|ladies|gents|boys|girls)('?s)?\b|\b(male|female)\b"
+    r"|\bfor (him|her|my (wife|husband|mom|mother|mum|dad|father|son|daughter|brother"
+    r"|sister|boyfriend|girlfriend|grandfather|grandmother|uncle|aunt))\b"
+)
+
 _TRIP_HINTS = (
     "trip", "travel", "holiday", "vacation", "getaway", "visit", "tour", "beach",
 )
@@ -117,9 +136,12 @@ def guess_preview_questions(query: str, today: date) -> list[ClarifyingQuestion]
     """
     text = query.lower()
     questions: list[ClarifyingQuestion] = []
-    if _implies_dated_trip(text):
+    # Never ask what the request already says: live, "I'm a man going on a
+    # trek near Leh from 20 to 27 December" was asked both "When is the trip?"
+    # and "Who is this for?" while the model was still working.
+    if _implies_dated_trip(text) and not _STATED_DATES.search(text):
         questions.append(_dates_question(today))
-    if _implies_trek(text) or _implies_apparel(text):
+    if (_implies_trek(text) or _implies_apparel(text)) and not _STATED_WEARER.search(text):
         questions.append(GENDER_QUESTION)
     return questions
 
