@@ -243,3 +243,62 @@ def test_an_anniversary_hamper_request_shows_real_hampers(catalogue):
     assert shelves & {"Hampers", "Gourmet & Dry Fruits"}, shelves
     titles = " ".join(i.product.title.lower() for items in groups.values() for i in items)
     assert "bhaiya" not in titles and "pureheart" not in titles
+
+
+# Live, with the model path: "I'm a man going on a trek near Leh from 20 to
+# 27 December, need thermals and warm socks, budget 3000" returned "Nothing in
+# the catalogue fits". One cause (fixed in 85b98d9) was shelf spelling. The
+# other: the model's global filters.categories listed only the thermals shelf,
+# and that entry was kept for the socks group too (both sit under "Men's
+# Apparel"), so socks came back empty while dozens were in budget.
+
+
+def _plan_for(paths_by_bucket, categories, price_max=None, gender=None):
+    class _Plan:
+        name = "plan"
+        is_real = True
+
+        def structured(self, **_):
+            return {
+                "intent_summary": "Planned.", "is_shopping_request": True,
+                "buckets": [{"name": name, "search_phrases": [name.lower()], "why_needed": "x",
+                             "role": "required", "catalogue_paths": paths}
+                            for name, paths in paths_by_bucket.items()],
+                "filters": {"price_max": price_max, "gender": gender, "categories": categories},
+                "context": {}, "assumptions": [],
+            }
+    return _Plan()
+
+
+def test_a_category_filter_naming_one_shelf_does_not_empty_another_group(catalogue):
+    response_cache.clear()
+    response = recommend(
+        RecommendRequest(query="thermals and warm socks for a trek", skip_clarification=True),
+        catalogue,
+        _plan_for({"Thermals": ["Men's Apparel/Thermals & Base Layers"],
+                   "Warm Socks": ["Men's Apparel/Socks & Hosiery"]},
+                  ["Men's Apparel/Thermals & Base Layers"], price_max=3000, gender="men"),
+        today=date(2026, 9, 29),
+    )
+    assert {g.name for g in response.groups} == {"Thermals", "Warm Socks"}
+
+
+def test_every_stocked_shelf_returns_results_whatever_else_the_filter_names(catalogue):
+    """The general guard against false "Nothing in the catalogue fits": a
+    group planned on a shelf that has products must return some, however the
+    model filled the global category filter."""
+    from app.services.taxonomy import ALL_PATHS
+
+    stocked = sorted({f"{p.category}/{p.subcategory}" for p in catalogue.products} & set(ALL_PATHS))
+    empty = []
+    for path in stocked:
+        other = next(p for p in stocked if p.split("/")[0] == path.split("/")[0] and p != path) \
+            if sum(p.split("/")[0] == path.split("/")[0] for p in stocked) > 1 else "Footwear/Boots"
+        response_cache.clear()
+        response = recommend(
+            RecommendRequest(query=f"something from {path}", skip_clarification=True),
+            catalogue, _plan_for({"Need": [path]}, [other]), today=date(2026, 9, 29),
+        )
+        if not response.groups:
+            empty.append((path, other))
+    assert not empty, empty

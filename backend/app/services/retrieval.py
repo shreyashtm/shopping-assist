@@ -276,10 +276,17 @@ def _relevant_categories(filters: QueryFilters, bucket: Bucket) -> list[str]:
     """
     if not filters.categories:
         return []
+    bucket_paths = set(bucket.catalogue_paths)
     bucket_categories = {path.split("/")[0] for path in bucket.catalogue_paths}
+    # A full "Category/Subcategory" entry describes that one shelf, so it
+    # only applies to a bucket that uses it. Matching it by its top-level
+    # category, as before, let a filter naming only the thermals shelf empty
+    # a socks bucket -- both are "Men's Apparel" -- and a Leh trek asking for
+    # thermals and socks came back "Nothing in the catalogue fits". The same
+    # happened for every stocked shelf with a sibling named in the filter.
     relevant = [
         c for c in filters.categories
-        if c in bucket_categories or c.split("/")[0] in bucket_categories
+        if ((c in bucket_paths) if "/" in c else (c in bucket_categories))
     ]
     return relevant
 
