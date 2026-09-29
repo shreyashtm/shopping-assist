@@ -302,3 +302,25 @@ def test_every_stocked_shelf_returns_results_whatever_else_the_filter_names(cata
         if not response.groups:
             empty.append((path, other))
     assert not empty, empty
+
+
+# The two requests from the live frontend check, in keyword mode.
+
+
+def test_leh_request_respects_what_it_states(catalogue):
+    groups = _cards(catalogue, "I'm a man going on a trek near Leh from 20 to 27 December, "
+                               "need thermals and warm socks, budget 3000")
+    assert list(groups) == ["Thermals & Base Layers", "Socks"]
+    for items in groups.values():
+        for item in items:
+            assert item.product.attributes.gender in ("men", "unisex"), item.product.title
+            assert item.product.price_inr <= 3000, (item.product.title, item.product.price_inr)
+
+
+def test_hampta_request_shows_only_what_was_named(catalogue):
+    groups = _cards(catalogue, "I'm a man trekking Hampta Pass the last week of October for "
+                               "a week, need a warm jacket and trekking shoes")
+    assert list(groups) == ["Jackets", "Footwear"]
+    _only(groups["Jackets"], JACKETS, "warm jacket")
+    for item in groups["Jackets"] + groups["Footwear"]:
+        assert item.product.attributes.gender in ("men", "unisex"), item.product.title

@@ -6,6 +6,8 @@ trousers above the backpacks, because the Clothing route's keyword "top" was
 matched as a substring of "laptop".
 """
 
+import pytest
+
 from app.services.offline import build_offline_query
 
 
@@ -146,3 +148,53 @@ def test_a_heading_without_an_article_still_reads_correctly():
 def test_a_wedding_anniversary_heading_names_one_occasion():
     b = build_offline_query("a gift hamper for my parents' wedding anniversary", []).buckets[0]
     assert b.why_needed == "You asked for “a gift hamper”, for an anniversary."
+
+
+# From the live frontend searches in keyword mode.
+
+LEH = "I'm a man going on a trek near Leh from 20 to 27 December, need thermals and warm socks, budget 3000"
+
+
+def test_stated_gender_and_budget_become_filters():
+    plan = build_offline_query(LEH, [])
+    assert plan.filters.gender == "men"
+    assert plan.filters.price_max == 3000
+
+
+@pytest.mark.parametrize("query, gender, pmin, pmax", [
+    ("a jacket for my wife under 2000", "women", None, 2000),
+    ("men's running shoes between ₹1,500 and ₹3,000", "men", 1500, 3000),
+    ("a kurta for my brother, budget around 1500", "men", None, 1500),
+    ("jeans for her within rs 1200", "women", None, 1200),
+    ("trekking shoes 1500-3000", None, 1500, 3000),
+    ("a gift for anyone", None, None, None),
+])
+def test_filters_parsed_from_text(query, gender, pmin, pmax):
+    f = build_offline_query(query, []).filters
+    assert (f.gender, f.price_min, f.price_max) == (gender, pmin, pmax)
+
+
+def test_stated_facts_are_not_asked_again():
+    slots = [q.slot for q in build_offline_query("shirt for my husband under 1500", []).questions]
+    assert "budget" not in slots and "gender" not in slots
+
+
+def test_trek_as_context_does_not_open_a_kit_group():
+    assert _bucket_names(LEH) == ["Thermals & Base Layers", "Socks"]
+    assert _bucket_names("I'm a man trekking Hampta Pass the last week of October for a week, "
+                         "need a warm jacket and trekking shoes") == ["Jackets", "Footwear"]
+
+
+def test_trek_kit_still_opens_when_asked_for_or_alone():
+    assert "Trekking Essentials" in _bucket_names("trekking gear and a warm jacket")
+    assert _bucket_names("going camping next week") == ["Trekking Essentials"]
+
+
+def test_gift_as_context_does_not_open_a_gift_group():
+    assert _bucket_names("a watch as a gift for my dad") == ["Watches"]
+    assert "Gift Ideas" in _bucket_names("a gift hamper and a watch")
+
+
+def test_headings_keep_the_shoppers_casing_and_drop_lead_ins():
+    b = build_offline_query("Need a warm Jacket for Manali", []).buckets[0]
+    assert b.why_needed == "You asked for “a warm Jacket”."

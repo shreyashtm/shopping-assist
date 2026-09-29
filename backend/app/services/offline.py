@@ -231,13 +231,16 @@ def _claim(text: str, pattern: str) -> str:
     return re.sub(pattern, lambda m: " " * len(m.group()), text)
 
 
-def _what_was_asked(text: str, start: int) -> str:
+def _what_was_asked(text: str, start: int, original: str | None = None) -> str:
     """The shopper's own words around a keyword match: "a warm jacket".
 
     Taken from the clause holding the match, a few words either side, so a
     group is searched and titled by what was asked for it -- not by the whole
-    request, which pulled every group toward every item mentioned.
+    request, which pulled every group toward every item mentioned. Matching
+    runs on the lower-cased text; the words returned keep the shopper's own
+    casing when `original` is given.
     """
+    source = original if original is not None and len(original) == len(text) else text
     clause_start = 0
     for sep in _CLAUSE_SPLIT.finditer(text):
         if sep.start() >= start:
@@ -246,14 +249,79 @@ def _what_was_asked(text: str, start: int) -> str:
         clause_start = sep.end()
     else:
         clause_end = len(text)
-    before = _LEADING_FILLER.sub("", text[clause_start:start]).split()[-3:]
-    after = text[start:clause_end].split()[:3]
+    filler = _LEADING_FILLER.match(text[clause_start:start])
+    head_from = clause_start + (filler.end() if filler else 0)
+    before = source[head_from:start].split()[-3:]
+    after = source[start:clause_end].split()[:3]
+    # Stop at "for": what follows is the purpose ("a warm jacket for Manali").
+    lowered_after = [w.lower() for w in after]
+    if "for" in lowered_after[1:]:
+        after = after[: lowered_after.index("for", 1)]
     words = [w.strip(".!?'\"()") for w in before + after]
-    while words and words[-1] in _EDGE_STOPWORDS | _ARTICLES:
+    while words and words[-1].lower() in _EDGE_STOPWORDS | _ARTICLES:
         words.pop()
-    while words and words[0] in _EDGE_STOPWORDS:
+    while words and words[0].lower() in _EDGE_STOPWORDS:
         words.pop(0)
     return " ".join(w for w in words if w)
+
+
+# Facts a request states in passing. The fallback used to ignore them: live,
+# "I'm a man ... need thermals and warm socks, budget 3000" showed women's
+# socks and Rs 26,999 jackets, then asked for a budget.
+_MEN = re.compile(
+    r"\bi'?m an? (man|guy|boy)\b|\bi am an? (man|guy|boy)\b|\b(men|mens|gents|boys)('?s)?\b"
+    r"|\bmale\b|\bfor (him|my (husband|dad|father|son|brother|boyfriend|grandfather|grandpa|uncle))\b"
+)
+_WOMEN = re.compile(
+    r"\bi'?m an? (woman|girl|lady)\b|\bi am an? (woman|girl|lady)\b|\b(women|womens|ladies|girls)('?s)?\b"
+    r"|\bfemale\b|\bfor (her|my (wife|mom|mother|mum|daughter|sister|girlfriend|grandmother|grandma|aunt))\b"
+)
+_AMOUNT = r"(?:₹|rs\.?|inr)?\s*(\d[\d,]*)(k)?"
+_RANGE = re.compile(rf"(?:between\s+)?{_AMOUNT}\s*(?:-|–|to|and)\s*{_AMOUNT}")
+_CEILING = re.compile(
+    r"\b(?:under|below|less than|within|up ?to|max(?:imum)?|budget(?: of| is)?"
+    rf"(?:\s+(?:around|about|approx(?:imately)?))?|around|about)\s+{_AMOUNT}"
+)
+
+
+def _amount(digits: str, thousands: str | None) -> int:
+    value = int(digits.replace(",", ""))
+    return value * 1000 if thousands else value
+
+
+def _stated_filters(text: str) -> QueryFilters:
+    """Gender and budget the request states in its own words."""
+    men, women = bool(_MEN.search(text)), bool(_WOMEN.search(text))
+    gender = "men" if men and not women else "women" if women and not men else None
+    price_min = price_max = None
+    for m in _RANGE.finditer(text):
+        low, high = _amount(m.group(1), m.group(2)), _amount(m.group(3), m.group(4))
+        if 100 <= low < high:  # "20 to 27 December" is dates, not rupees
+            price_min, price_max = low, high
+            break
+    if price_max is None:
+        m = _CEILING.search(text)
+        if m and _amount(m.group(1), m.group(2)) >= 100:
+            price_max = _amount(m.group(1), m.group(2))
+    return QueryFilters(gender=gender, price_min=price_min, price_max=price_max)
+
+
+# Routes that name an activity or purpose rather than a product. "Going on a
+# trek ... need thermals and warm socks" asks for thermals and socks; the trek
+# is context. Such a route opens a group only when its kit is asked for
+# ("trekking gear", "a gift hamper") or nothing more specific is named.
+_CONTEXT_ROUTES = {"Trekking Essentials", "Gift Ideas"}
+_KIT_NOUNS = r"(gear|essentials|kit|equipment|stuff|things|clothing|clothes|items|hampers?|box|set|ideas|basket|pack)"
+_ITEM_KEYWORDS = {"sleeping bag", "hamper"}
+
+
+def _asks_for_kit(keywords: tuple[str, ...], text: str) -> bool:
+    for word in keywords:
+        if word in _ITEM_KEYWORDS and re.search(rf"\b{re.escape(word)}", text):
+            return True
+        if re.search(rf"\b{re.escape(word)}\w*(?:\s+\w+)?\s+{_KIT_NOUNS}\b", text):
+            return True
+    return False
 
 
 def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
@@ -311,6 +379,14 @@ def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
         if starts:
             matched.append((min(starts), bucket_name, paths, phrase))
 
+    specific = [m for m in matched if m[1] not in _CONTEXT_ROUTES]
+    if specific:
+        route_keywords = {name: keywords for keywords, name, *_ in _ROUTES}
+        matched = [
+            m for m in matched
+            if m[1] not in _CONTEXT_ROUTES or _asks_for_kit(route_keywords[m[1]], text)
+        ]
+
     # A broad route gives up shelves a narrower matched route covers: asked for
     # "trekking gear" and "a warm jacket", jackets belong in Jackets, and
     # trekking gear should show the thermals and camp kit nobody named.
@@ -335,7 +411,7 @@ def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
 
     # In the order the shopper asked, not the order of this table.
     for start, bucket_name, paths, phrase in sorted(narrowed, key=lambda m: m[0]):
-        asked = _what_was_asked(text, start)
+        asked = _what_was_asked(text, start, query)
         search = " ".join(w for w in asked.split() if w not in _ARTICLES) or phrase
         extra = [o for o in occasions if o not in asked]
         if extra:
@@ -366,17 +442,24 @@ def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
             )
         ]
 
-    # Ask only when the request is thin and nothing has been answered yet.
+    stated = _stated_filters(text)
+    # Ask only when the request is thin and nothing has been answered yet --
+    # and never for what it already says.
     thin = len(text.split()) < 10 and not answers
+    questions = [
+        q for q in _GENERIC_QUESTIONS
+        if not (q.slot == "budget" and (stated.price_max or stated.price_min))
+        and not (q.slot == "gender" and stated.gender)
+    ] if thin else []
     return StructuredQuery(
         intent_summary=f"Looking for: {query.strip()}",
         buckets=buckets,
         # Categories are left unset: the per-slot paths already constrain
         # retrieval, and a global category filter would only narrow it further.
-        filters=QueryFilters(),
+        filters=stated,
         context=ResolvedContext(),
         assumptions=["Interpreted without AI reasoning, so this is a keyword match."],
-        needs_clarification=thin,
-        questions=_GENERIC_QUESTIONS if thin else [],
+        needs_clarification=bool(questions),
+        questions=questions,
         confidence=0.3,
     )
