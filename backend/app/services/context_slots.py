@@ -364,6 +364,24 @@ _GENDERED_RECIPIENT = re.compile(
 _GROUP_RECIPIENT = re.compile(r"\b(parents|couple|in-laws|family|bhaiya bhabhi)\b|\band\b|&")
 
 
+_WORN_CATEGORIES = frozenset({
+    "Men's Apparel", "Women's Apparel", "Ethnic Wear", "Footwear", "Watches & Jewellery",
+})
+
+
+def wearer_matters(structured: StructuredQuery, text: str) -> bool:
+    """Whether anything in the plan is worn, so who wears it changes the pick.
+
+    Hampers, dry fruits and home fragrance suit a whole family; asking "Men /
+    Women" for them only slows the shopper down. With no plan yet, a gift
+    request defaults to those shared gifts, anything else to asking.
+    """
+    paths = [p for b in structured.buckets for p in b.catalogue_paths]
+    if paths:
+        return any(p.split("/")[0] in _WORN_CATEGORIES for p in paths)
+    return not _implies_gift(text)
+
+
 def _has_gender(structured: StructuredQuery, answered: set[str]) -> bool:
     recipient = (structured.context.recipient or "").lower()
     return bool(
@@ -491,7 +509,11 @@ def build_context_variables(
                 value=structured.filters.gender or structured.context.recipient or "unspecified",
             )
         )
-    elif _implies_apparel(text) and not _is_specific_trip(structured):
+    elif (
+        _implies_apparel(text)
+        and wearer_matters(structured, text)
+        and not _is_specific_trip(structured)
+    ):
         slots.append(ContextVariable(name="gender", label="For", status="needed"))
 
     if _has_occasion_signal(structured, answered, text):
@@ -591,8 +613,8 @@ def apply_context_audit(
             return _has_occasion_signal(structured, answered, text)
         if slot in {"budget", "budget_tier", "budget_range"}:
             return _has_budget(structured, answered)
-        if slot in {"gender", "audience"}:
-            return _has_gender(structured, answered)
+        if slot in {"gender", "audience"} or _question_keys(question) == {"gender"}:
+            return _has_gender(structured, answered) or not wearer_matters(structured, text)
         if slot in {"recipient", "who_for"}:
             return structured.context.recipient is not None
         if slot in {"dates", "timing", "when"}:

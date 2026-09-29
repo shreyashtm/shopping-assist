@@ -17,6 +17,7 @@ request falls through to a keyword interpretation and the response says so via
 
 import calendar
 import logging
+import re
 import time
 import uuid
 from collections.abc import Iterator
@@ -68,7 +69,7 @@ from app.services.interpreter import (
     merge_answers,
     offline_interpret,
 )
-from app.services.offline import stated_filters
+from app.services.offline import _plain_summary, stated_filters
 from app.services.retrieval import (
     ScoredProduct,
     dedupe_across_buckets,
@@ -137,6 +138,21 @@ def _select_preview_buckets(buckets: list[Bucket], limit: int) -> list[Bucket]:
     role_rank = {"required": 0, "recommended": 1, "optional": 2}
     ranked = sorted(buckets, key=lambda b: (role_rank.get(b.role, 3), b.priority))
     return ranked[:limit]
+
+
+_GIFT_REQUEST = re.compile(r"\b(gifts?|present|hampers?)\b", re.I)
+FAMILY_GIFTS = Bucket(
+    name="Festive gifts for the family",
+    search_phrases=["festive gift hamper", "dry fruits gift box", "home fragrance gift set"],
+    why_needed="Gifts a whole family enjoys on a festive day, while you tell me more "
+    "about who it's for.",
+    role="recommended",
+    catalogue_paths=["Gifting/Hampers", "Gifting/Gourmet & Dry Fruits", "Gifting/Home Fragrance"],
+)
+
+_ABOUT_THE_REQUEST = re.compile(
+    r"\b(the user|the shopper|the customer|the request|too generic|too vague)\b", re.I
+)
 
 
 def _next_year(day: date, today: date) -> date:
@@ -415,6 +431,12 @@ def recommend_events(
 
     # The month the shopper named wins over the model's. Live, qwen3:8b read
     # "Shimla in January" as 29 Sep - 31 Dec 2026, a 90-day trip starting today.
+    # The heading is spoken to the shopper. Live, qwen3:8b wrote "The user
+    # needs new clothes, but the request is too generic", a note about the
+    # request, and it became the page heading; the shopper's words replace it.
+    if _ABOUT_THE_REQUEST.search(structured.intent_summary):
+        structured = structured.model_copy(update={"intent_summary": _plain_summary(payload.query)})
+
     ctx = structured.context
     month = stated_month(payload.query)
     if month and ctx.start_date and ctx.start_date.month != month:
@@ -615,6 +637,24 @@ def recommend_events(
         if is_group_worth_showing(per_bucket.get(b.name, []))
     }
 
+    # A gift request that found nothing still gets gifts. Live, "gift ideas"
+    # came back as questions and no products, though the gifting shelves hold
+    # what a family receives on a festive day.
+    if not shown and structured.is_shopping_request and _GIFT_REQUEST.search(payload.query):
+        family = search_bucket(
+            catalogue,
+            embedder.embed([*FAMILY_GIFTS.search_phrases, FAMILY_GIFTS.name]),
+            FAMILY_GIFTS,
+            structured.filters,
+            structured.context,
+            limit=settings.candidates_per_bucket,
+            constraints=constraints,
+            request_text=payload.query,
+        )
+        if is_group_worth_showing(family):
+            shown[FAMILY_GIFTS.name] = family
+            structured = structured.model_copy(update={"buckets": [FAMILY_GIFTS, *structured.buckets]})
+
     # Anything the planner asked for that the catalogue could not cover is
     # recorded explicitly. The two causes read differently to a user: a slot
     # with no catalogue path at all means we stock nothing of that type, while
@@ -679,7 +719,7 @@ def recommend_events(
     # whole request regardless of how much of it gets previewed.
     if structured.needs_clarification and not payload.skip_clarification:
         preview_buckets = _select_preview_buckets(structured.buckets, MAX_BUCKETS_FOR_PREVIEW)
-        preview_names = {b.name for b in preview_buckets}
+        preview_names = {b.name for b in preview_buckets} | ({FAMILY_GIFTS.name} & shown.keys())
         preview_groups = [g for g in groups if g.name in preview_names]
         preview_unfilled = [u for u in unfilled if u.name in preview_names]
         yield "result", _cache_and_return(key, RecommendResponse(

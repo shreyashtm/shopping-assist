@@ -713,3 +713,62 @@ def test_may_the_verb_is_not_a_month():
     assert stated_month("I may need a jacket") is None
     assert stated_month("a trip in May") == 5
     assert stated_month("Leh for 10 days in January") == 1
+
+
+def test_the_heading_speaks_to_the_shopper(catalogue):
+    """Live, qwen3:8b: "The user needs new clothes, but the request is too
+    generic" became the page heading."""
+    class _Narrates:
+        name = "i"
+        is_real = True
+
+        def structured(self, **_):
+            return {"intent_summary": "The user needs new clothes, but the request is too generic.",
+                    "is_shopping_request": True,
+                    "buckets": [{"name": "Clothing", "search_phrases": ["t-shirt"], "why_needed": "x",
+                                 "role": "recommended", "catalogue_paths": ["Men's Apparel/T-Shirts"]}],
+                    "assumptions": []}
+
+    response = _response(catalogue, "I need new clothes", _Narrates(), skip_clarification=True)
+    assert response.intent_summary == "I need new clothes"
+
+
+def _asks_about_gifts(buckets):
+    class _Model:
+        name = "i"
+        is_real = True
+
+        def structured(self, **_):
+            return {"intent_summary": "Gift ideas.", "is_shopping_request": True,
+                    "buckets": buckets, "needs_clarification": True,
+                    "questions": [
+                        {"slot": "gender", "question": "Who is this for?", "options": [
+                            {"label": "Men", "value": "gender:men"}, {"label": "Women", "value": "gender:women"}]},
+                        {"slot": "budget", "question": "Roughly what budget?", "options": [
+                            {"label": "Under ₹1,000", "value": "price_max:1000"},
+                            {"label": "₹1,000 – 3,000", "value": "price_min:1000,price_max:3000"}]}],
+                    "assumptions": []}
+    return _Model()
+
+
+def test_a_general_gift_request_shows_family_gifts_without_asking_gender(catalogue):
+    """Live: "gift ideas" came back as three questions -- budget, gift type,
+    "Who is this for? Men / Women" -- and no products, though hampers and dry
+    fruits suit a whole family and nobody wears them."""
+    # The model's own group names a shelf the catalogue doesn't stock, so it
+    # finds nothing -- the live case.
+    personalised = [{"name": "Personalised Gifts", "search_phrases": ["personalised gift"],
+                     "why_needed": "x", "role": "recommended", "catalogue_paths": []}]
+    response = _response(catalogue, "gift ideas", _asks_about_gifts(personalised))
+    assert response.groups, "a gift request should show gifts, not only questions"
+    assert all(i.product.category == "Gifting" for g in response.groups for i in g.items)
+    asked = [q.question for q in (response.questions or [])]
+    assert "Who is this for?" not in asked
+    assert "Roughly what budget?" in asked
+
+
+def test_a_gift_that_is_worn_still_asks_who_wears_it(catalogue):
+    shirt = [{"name": "Shirts", "search_phrases": ["shirt"], "why_needed": "x", "role": "required",
+              "catalogue_paths": ["Men's Apparel/Casual Shirts"]}]
+    response = _response(catalogue, "a shirt as a gift", _asks_about_gifts(shirt))
+    assert "Who is this for?" in [q.question for q in (response.questions or [])]
