@@ -233,3 +233,13 @@ def test_new_routes_do_not_fire_on_lookalike_words():
                             ("a suitcase for my trip", "Suits & Blazers")):
         names = [b.name for b in build_offline_query(query, []).buckets]
         assert unwanted not in names, (query, names)
+
+
+def test_an_anniversary_hamper_request_shows_real_hampers(catalogue):
+    """Live: no hamper was tagged for anniversaries, so a request for an
+    anniversary hamper showed only perfumes and a keepsake."""
+    groups = _cards(catalogue, "a gift hamper for my parents' 25th anniversary")
+    shelves = {i.product.subcategory for items in groups.values() for i in items}
+    assert shelves & {"Hampers", "Gourmet & Dry Fruits"}, shelves
+    titles = " ".join(i.product.title.lower() for items in groups.values() for i in items)
+    assert "bhaiya" not in titles and "pureheart" not in titles

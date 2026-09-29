@@ -464,7 +464,8 @@
         "gifting"
       ],
       "occasion": [
-        "festive"
+        "festive",
+        "anniversary"
       ],
       "material": "dry fruits",
       "temp_rating_c": null,
@@ -497,7 +498,8 @@
         "gifting"
       ],
       "occasion": [
-        "festive"
+        "festive",
+        "anniversary"
       ],
       "material": "dry fruits",
       "temp_rating_c": null,
@@ -5507,7 +5509,8 @@
         "gifting"
       ],
       "occasion": [
-        "festive"
+        "festive",
+        "anniversary"
       ],
       "material": null,
       "temp_rating_c": null,
@@ -5542,7 +5545,8 @@
       "occasion": [
         "festive",
         "birthday",
-        "everyday"
+        "everyday",
+        "anniversary"
       ],
       "material": null,
       "temp_rating_c": null,
@@ -5577,7 +5581,8 @@
       "occasion": [
         "festive",
         "birthday",
-        "everyday"
+        "everyday",
+        "anniversary"
       ],
       "material": null,
       "temp_rating_c": null,
@@ -5612,7 +5617,8 @@
       "occasion": [
         "festive",
         "birthday",
-        "everyday"
+        "everyday",
+        "anniversary"
       ],
       "material": null,
       "temp_rating_c": null,
@@ -5682,7 +5688,8 @@
       "occasion": [
         "everyday",
         "birthday",
-        "festive"
+        "festive",
+        "anniversary"
       ],
       "material": null,
       "temp_rating_c": null,
