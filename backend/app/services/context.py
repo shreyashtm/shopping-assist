@@ -397,6 +397,14 @@ def _locate(
             _miss_cache.set(key, True)
 
     has_proposal = proposed_lat is not None and proposed_lon is not None
+    # A name whose best reading is a continent or country has no one climate,
+    # whatever point the model offers. Checked before matching the proposal:
+    # live, the model's point for "Europe" was far from Europe's centre, so
+    # the match below rejected the gazetteer entry and the bare point was used.
+    if ranked and candidates and (candidates[0].extent_deg or 0) > MAX_AREA_FOR_MODEL_POINT_DEG:
+        logger.info("%r is %.0f deg wide, too broad for one point", location, candidates[0].extent_deg)
+        miss()
+        return None
     chosen = pick_place(candidates, proposed_lat, proposed_lon) if (ranked or has_proposal) else None
 
     if chosen is not None and _is_area(chosen):

@@ -351,6 +351,10 @@ def test_a_continent_is_too_broad_even_with_a_model_point(no_throttle):
     europe = _area("Europe", 51.0, 10.0, None, None, 34.0, 71.0, -25.0, 45.0)
     climate = _resolve("Europe", _GazetteerTransport(ranked=[europe]), lat=51.0, lon=10.0)
     assert climate.source == "unobtainable"
+    # Live, the point was far from Europe's centre, so matching it against the
+    # gazetteer rejected the Europe entry and the bare point was used instead.
+    climate = _resolve("Europe", _GazetteerTransport(ranked=[europe]), lat=48.85, lon=2.35)
+    assert climate.source == "unobtainable"
 
 
 def test_a_small_area_is_still_a_point(no_throttle):
