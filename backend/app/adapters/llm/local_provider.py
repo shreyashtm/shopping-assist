@@ -26,7 +26,7 @@ from typing import Any
 
 import httpx
 
-from app.adapters.llm.base import LLMUnavailable
+from app.adapters.llm.base import LLMUnavailable, post_json_with_deadline
 
 logger = logging.getLogger(__name__)
 
@@ -77,19 +77,16 @@ class LocalProvider:
         # request field for it, so it is silently ignored rather than sent
         # as a parameter no local model understands.
 
-        kwargs: dict[str, Any] = {}
-        if timeout_s is not None:
-            kwargs["timeout"] = timeout_s
 
         try:
-            response = self._client.post(self._base_url, json=payload, **kwargs)
-            response.raise_for_status()
+            body = post_json_with_deadline(
+                self._client, self._base_url, timeout_s, json=payload
+            )
         except httpx.HTTPError as exc:
             raise LLMUnavailable(
                 f"{model} call failed (is `ollama serve` running?): {exc}"
             ) from exc
 
-        body = response.json()
         try:
             text = body["choices"][0]["message"]["content"]
         except (KeyError, IndexError) as exc:

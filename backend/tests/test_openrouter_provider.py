@@ -109,3 +109,29 @@ def test_an_error_inside_a_200_response_is_reported_by_its_own_message():
     with pytest.raises(LLMUnavailable, match="Service temporarily overloaded"):
         provider.structured(system="s", user="u", schema={"type": "object"}, model="m",
                             max_tokens=10, timeout_s=None, effort=None)
+
+
+def test_the_timeout_is_a_total_deadline_not_a_gap_between_bytes():
+    """Live: a search sat at "Reading your request" for over two minutes
+    with a 75s timeout. OpenRouter keeps slow requests open by trickling
+    whitespace, and httpx's timeout only limits the gap between bytes, so
+    it never fired. The request must give up at the deadline and let the
+    caller degrade to keyword matching."""
+    import time as _time
+
+    from app.adapters.llm.base import LLMUnavailable
+
+    def trickle():
+        for _ in range(100):  # ~5s of keep-alive whitespace, 50ms apart
+            _time.sleep(0.05)
+            yield b" "
+
+    def handler(request):
+        return httpx.Response(200, content=trickle())
+
+    provider = _provider_with_transport(handler)
+    started = _time.monotonic()
+    with pytest.raises(LLMUnavailable, match="timed out"):
+        provider.structured(system="s", user="u", schema={"type": "object"}, model="m",
+                            max_tokens=10, timeout_s=0.5, effort=None)
+    assert _time.monotonic() - started < 1.5

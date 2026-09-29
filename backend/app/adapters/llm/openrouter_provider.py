@@ -20,7 +20,7 @@ from typing import Any
 
 import httpx
 
-from app.adapters.llm.base import LLMUnavailable
+from app.adapters.llm.base import LLMUnavailable, post_json_with_deadline
 
 logger = logging.getLogger(__name__)
 
@@ -68,25 +68,21 @@ class OpenRouterProvider:
         if effort:
             payload["reasoning_effort"] = effort
 
-        kwargs: dict[str, Any] = {}
-        if timeout_s is not None:
-            kwargs["timeout"] = timeout_s
 
         try:
-            response = self._client.post(
+            body = post_json_with_deadline(
+                self._client,
                 CHAT_COMPLETIONS_URL,
+                timeout_s,
                 headers={
                     "Authorization": f"Bearer {self._api_key}",
                     "Content-Type": "application/json",
                 },
                 json=payload,
-                **kwargs,
             )
-            response.raise_for_status()
         except httpx.HTTPError as exc:
             raise LLMUnavailable(f"{model} call failed: {exc}") from exc
 
-        body = response.json()
         # OpenRouter can answer HTTP 200 with the upstream failure in the body
         # ("Service temporarily overloaded", code 503). Say so, rather than
         # "unexpected response shape", which hid the cause in the logs.
