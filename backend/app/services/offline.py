@@ -11,12 +11,11 @@ import re
 
 from app.schemas.query import (
     Bucket,
-    ClarifyingQuestion,
     QueryFilters,
-    QuestionOption,
     ResolvedContext,
     StructuredQuery,
 )
+from app.services.context_slots import BUDGET_QUESTION, GENDER_QUESTION
 from app.services.taxonomy import OCCASIONS
 
 # Keyword -> (bucket name, canonical catalogue paths, catalogue-language phrase).
@@ -201,27 +200,10 @@ _CATCH_ALL_PATHS = [
     "Home & Kitchen/Appliances", "Bags & Luggage/Backpacks",
 ]
 
-_GENERIC_QUESTIONS = [
-    ClarifyingQuestion(
-        slot="budget",
-        question="Roughly what budget?",
-        options=[
-            QuestionOption(label="Under Rs.500", value="price_max:500"),
-            QuestionOption(label="Rs.500 - 1,500", value="price_min:500,price_max:1500"),
-            QuestionOption(label="Rs.1,500 - 3,000", value="price_min:1500,price_max:3000"),
-            QuestionOption(label="Premium", value="price_min:3000"),
-        ],
-    ),
-    ClarifyingQuestion(
-        slot="gender",
-        question="Who's it for?",
-        options=[
-            QuestionOption(label="Men", value="gender:men"),
-            QuestionOption(label="Women", value="gender:women"),
-            QuestionOption(label="Doesn't matter", value="gender:unisex"),
-        ],
-    ),
-]
+# The same chips the main path offers. This module used to keep its own copies,
+# which drifted: "Rs.500 - 1,500" and "Doesn't matter" here, "₹500 – 1,500" and
+# "Anyone / unisex" everywhere else.
+_GENERIC_QUESTIONS = [BUDGET_QUESTION, GENDER_QUESTION]
 
 
 _MODIFIER_PHRASES = (
@@ -362,7 +344,9 @@ def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
             Bucket(
                 name=bucket_name,
                 search_phrases=list(dict.fromkeys([phrase, search])),
-                why_needed=f"You asked for {asked or phrase}"
+                # Quoted, because these are the shopper's own words and may not
+                # read as a sentence ("You asked for wedding sherwani.").
+                why_needed=f"You asked for “{asked or phrase}”"
                 + (f", for {occasion_words}" if extra else "") + ".",
                 role="recommended",
                 catalogue_paths=paths,

@@ -104,7 +104,7 @@ def test_each_group_searches_with_its_own_words_not_the_whole_request():
 
 def test_headings_quote_what_the_shopper_said():
     jackets = next(b for b in build_offline_query(KIT, []).buckets if b.name == "Jackets")
-    assert jackets.why_needed == "You asked for a warm jacket."
+    assert jackets.why_needed == "You asked for “a warm jacket”."
 
 
 def test_t_shirt_does_not_also_open_a_shirts_group():
@@ -125,4 +125,19 @@ def test_a_broad_route_alone_keeps_all_its_shelves():
 
 def test_occasion_heading_reads_naturally():
     b = build_offline_query("a gift hamper for my parents' 25th anniversary", []).buckets[0]
-    assert b.why_needed == "You asked for a gift hamper, for an anniversary."
+    assert b.why_needed == "You asked for “a gift hamper”, for an anniversary."
+
+
+def test_fallback_chips_match_the_main_path():
+    """Keyword mode showed "Under Rs.500" and "Doesn't matter" while the
+    rest of the app says "Under ₹500" and "Anyone / unisex"."""
+    from app.services.context_slots import BUDGET_QUESTION, GENDER_QUESTION
+
+    questions = build_offline_query("shirt", []).questions
+    assert questions == [BUDGET_QUESTION, GENDER_QUESTION]
+    assert not any("Rs." in o.label for q in questions for o in q.options)
+
+
+def test_a_heading_without_an_article_still_reads_correctly():
+    b = build_offline_query("wedding sherwani for my brother", []).buckets[0]
+    assert b.why_needed == "You asked for “wedding sherwani”."
