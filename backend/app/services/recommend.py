@@ -50,10 +50,12 @@ from app.services.context import (
     resolve_climate,
 )
 from app.services.context_slots import (
+    WORN_CATEGORIES,
     apply_context_audit,
     has_budget_answers,
     has_date_answers,
     is_specific_trip,
+    names_worn_item,
     shelf_called_for,
     stated_dates,
     stated_money,
@@ -504,9 +506,22 @@ def recommend_events(
     # reported as something the catalogue couldn't cover.
     elevation = structured.context.elevation_estimate_m
     asked = " ".join([payload.query, *payload.answers])
+    # Clothes, shoes and jewellery can't be picked as a gift without knowing
+    # who wears them. Live, "gift ideas" led with men's dress shirts, then
+    # asked "For whom is the gift intended?"; the shared family gifts suit it.
+    unknown_wearer_gift = (
+        bool(_GIFT_REQUEST.search(asked))
+        and not wearer_implied(asked)
+        and not names_worn_item(asked)
+        and not any(a.startswith("category:") for a in payload.answers)
+    )
     buckets = []
     for bucket in structured.buckets:
-        paths = [p for p in bucket.catalogue_paths if shelf_called_for(p, asked, elevation)]
+        paths = [
+            p for p in bucket.catalogue_paths
+            if shelf_called_for(p, asked, elevation)
+            and not (unknown_wearer_gift and p.split("/")[0] in WORN_CATEGORIES)
+        ]
         if bucket.catalogue_paths and not paths:
             logger.info("Dropped group %r: its shelves don't fit this request", bucket.name)
             continue

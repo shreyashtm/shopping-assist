@@ -767,6 +767,23 @@ def test_a_general_gift_request_shows_family_gifts_without_asking_gender(catalog
     assert "Roughly what budget?" in asked
 
 
+def test_a_general_gift_request_leaves_out_clothes(catalogue):
+    """Live: "gift ideas" planned "Fashion", led with men's dress shirts, and
+    asked "For whom is the gift intended?"."""
+    fashion = [
+        {"name": "Fashion", "search_phrases": ["dress shirt"], "why_needed": "x", "role": "recommended",
+         "catalogue_paths": ["Men's Apparel/Formal Shirts"]},
+        {"name": "Home", "search_phrases": ["home fragrance gift"], "why_needed": "x",
+         "role": "recommended", "catalogue_paths": ["Gifting/Home Fragrance"]},
+    ]
+    response = _response(catalogue, "gift ideas", _asks_about_gifts(fashion))
+    assert "Fashion" not in {g.name for g in response.groups}
+    assert "Who is this for?" not in [q.question for q in (response.questions or [])]
+    # Once the shopper says who it's for, clothes are back on the table.
+    answered = _response(catalogue, "gift ideas", _asks_about_gifts(fashion), answers=["gender:men"])
+    assert "Fashion" in {g.name for g in answered.groups}
+
+
 def test_a_gift_that_is_worn_still_asks_who_wears_it(catalogue):
     shirt = [{"name": "Shirts", "search_phrases": ["shirt"], "why_needed": "x", "role": "required",
               "catalogue_paths": ["Men's Apparel/Casual Shirts"]}]

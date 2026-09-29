@@ -364,9 +364,21 @@ _GENDERED_RECIPIENT = re.compile(
 _GROUP_RECIPIENT = re.compile(r"\b(parents|couple|in-laws|family|bhaiya bhabhi)\b|\band\b|&")
 
 
-_WORN_CATEGORIES = frozenset({
+WORN_CATEGORIES = frozenset({
     "Men's Apparel", "Women's Apparel", "Ethnic Wear", "Footwear", "Watches & Jewellery",
 })
+
+
+_WORN_ITEM = re.compile(
+    r"\b(shirts?|t-?shirts?|tees?|tops?|dress(es)?|jeans|trousers?|pants|jackets?|coats?"
+    r"|sweaters?|hoodies?|kurtas?|kurtis?|sarees?|saris?|lehengas?|sherwanis?|shoes|sneakers"
+    r"|boots|sandals|heels|watch(es)?|jewell?ery|necklaces?|earrings?|rings?|bracelets?"
+    r"|scarf|scarves|ties?|socks|clothes|clothing|outfits?|apparel|wear)\b"
+)
+
+
+def names_worn_item(text: str) -> bool:
+    return bool(_WORN_ITEM.search(text.lower()))
 
 
 def wearer_matters(structured: StructuredQuery, text: str) -> bool:
@@ -378,7 +390,7 @@ def wearer_matters(structured: StructuredQuery, text: str) -> bool:
     """
     paths = [p for b in structured.buckets for p in b.catalogue_paths]
     if paths:
-        return any(p.split("/")[0] in _WORN_CATEGORIES for p in paths)
+        return any(p.split("/")[0] in WORN_CATEGORIES for p in paths)
     return not _implies_gift(text)
 
 
