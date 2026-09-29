@@ -172,3 +172,13 @@ def test_a_purpose_after_for_does_not_open_a_second_group(catalogue):
 def test_a_purpose_still_counts_when_it_is_the_request(catalogue):
     """"gym equipment" and "a bag and gym gloves" name gym gear as an item."""
     assert "Fitness Gear" in _cards(catalogue, "home gym equipment and dumbbells")
+
+
+def test_casual_garments_are_never_tagged_formal(catalogue):
+    """Live: a typography-print tee tagged formality=formal was shown as
+    "Matches the occasion's formality". A T-shirt, top, pair of shorts or
+    activewear piece is never formal wear."""
+    casual_types = {"T-Shirts", "Tops & T-Shirts", "Shorts", "Activewear"}
+    wrong = [(p.subcategory, p.title[:50]) for p in catalogue.products
+             if p.subcategory in casual_types and p.attributes.formality == "formal"]
+    assert not wrong, wrong

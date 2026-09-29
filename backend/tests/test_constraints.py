@@ -70,3 +70,40 @@ def test_trek_request_does_not_imply_a_formality_floor():
         _query(ResolvedContext(), bucket_name="Trekking Essentials", why_needed="Cold nights at altitude.")
     )
     assert constraints.required_formality is None
+
+
+# Live, with the model path: "women's jeans and a top for college" marked four
+# pairs of jeans "Too casual for the occasion". The model had written
+# "breathable fabrics suit long campus days", and the hint "suit" matched the
+# verb as a substring, so the whole casual request became formal.
+
+
+def _plan_with_text(why: str, intent: str = "Jeans and a top for college."):
+    from app.schemas.query import Bucket, StructuredQuery
+
+    return StructuredQuery(
+        intent_summary=intent,
+        buckets=[Bucket(name="Tops", search_phrases=["casual top"], why_needed=why,
+                        role="required", catalogue_paths=["Women's Apparel/Tops & T-Shirts"])],
+    )
+
+
+def test_suit_as_a_verb_does_not_make_a_request_formal():
+    from app.services.constraints import derive_constraints
+
+    plan = _plan_with_text("A versatile top; breathable fabrics suit long campus days.")
+    assert derive_constraints(plan).required_formality is None
+
+
+def test_informal_is_not_formal():
+    from app.services.constraints import derive_constraints
+
+    assert derive_constraints(_plan_with_text("Something informal.")).required_formality is None
+
+
+def test_real_formal_occasions_still_count():
+    from app.services.constraints import derive_constraints
+
+    for why in ("For my job interview.", "Attending a wedding.", "A navy blazer for work.",
+                "Black-tie gala dinner.", "A tuxedo for the reception."):
+        assert derive_constraints(_plan_with_text(why)).required_formality == "formal", why

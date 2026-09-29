@@ -12,7 +12,7 @@
         "viable": true
       },
       "Formal Shirts": {
-        "count": 37,
+        "count": 38,
         "price_range": [
           1295,
           7989
@@ -20,7 +20,7 @@
         "viable": true
       },
       "T-Shirts": {
-        "count": 77,
+        "count": 76,
         "price_range": [
           613,
           8296
@@ -44,7 +44,7 @@
         "viable": true
       },
       "Suits & Blazers": {
-        "count": 78,
+        "count": 79,
         "price_range": [
           2320,
           12487
@@ -76,7 +76,7 @@
         "viable": true
       },
       "Shorts": {
-        "count": 64,
+        "count": 63,
         "price_range": [
           813,
           9130

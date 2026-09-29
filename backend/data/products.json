@@ -8299,7 +8299,7 @@
       "is_giftable": false,
       "water_resistance": "none",
       "layer": "base",
-      "formality": "formal",
+      "formality": "casual",
       "breathability": null
     },
     "link_status": "verified",
@@ -8337,7 +8337,7 @@
       "is_giftable": false,
       "water_resistance": "none",
       "layer": "base",
-      "formality": "formal",
+      "formality": "casual",
       "breathability": null
     },
     "link_status": "verified",
@@ -8413,7 +8413,7 @@
       "is_giftable": false,
       "water_resistance": "none",
       "layer": "base",
-      "formality": "formal",
+      "formality": "casual",
       "breathability": null
     },
     "link_status": "verified",
@@ -8451,7 +8451,7 @@
       "is_giftable": false,
       "water_resistance": "none",
       "layer": "base",
-      "formality": "formal",
+      "formality": "casual",
       "breathability": null
     },
     "link_status": "verified",
@@ -8489,7 +8489,7 @@
       "is_giftable": false,
       "water_resistance": "none",
       "layer": "base",
-      "formality": "formal",
+      "formality": "casual",
       "breathability": null
     },
     "link_status": "verified",
@@ -14027,7 +14027,7 @@
     "title": "Unisex Tuxedo Shirt",
     "brand": "Generic",
     "category": "Men's Apparel",
-    "subcategory": "T-Shirts",
+    "subcategory": "Formal Shirts",
     "price_inr": 1402,
     "mrp_inr": null,
     "rating": 4.5,
@@ -19249,7 +19249,7 @@
     "title": "Men's 3 Piece Solid Suit Set",
     "brand": ",",
     "category": "Men's Apparel",
-    "subcategory": "Shorts",
+    "subcategory": "Suits & Blazers",
     "price_inr": 6213,
     "mrp_inr": null,
     "rating": 4.3,

@@ -14,6 +14,8 @@ irrelevant to its score, the second would need a whole separate constraint
 this module does not model.
 """
 
+import re
+
 from app.schemas.query import ContextConstraints, StructuredQuery
 
 # Precipitation thresholds, in mm/day -- deliberately separate from
@@ -27,10 +29,18 @@ HEAVY_RAIN_MM_PER_DAY = 15.0
 
 _RAIN_NOTE_HINTS = ("monsoon", "rain", "rainy", "wet weather")
 
+# Matched as whole words. As substrings, "suit" matched the verb in a model's
+# "breathable fabrics suit long campus days" and "formal" matched "informal",
+# turning a casual college request formal and marking every pair of jeans "too
+# casual for the occasion". Bare "suit" is left out for the same reason: it is
+# as often a verb as a garment, and a real suit request names the occasion
+# (office, interview, wedding) or a phrase listed here.
 _FORMAL_HINTS = (
-    "wedding", "formal", "office", "interview", "black-tie", "black tie",
-    "sherwani", "blazer", "suit", "gala",
+    "wedding", "formal", "formals", "office", "interview", "black-tie", "black tie",
+    "sherwani", "blazer", "tuxedo", "gala", "business suit", "three-piece suit",
+    "suit and tie",
 )
+_FORMAL_PATTERN = re.compile(r"\b(" + "|".join(re.escape(h) for h in _FORMAL_HINTS) + r")\b")
 
 
 def _implies_formal(structured: StructuredQuery) -> bool:
@@ -39,7 +49,7 @@ def _implies_formal(structured: StructuredQuery) -> bool:
         parts.extend([bucket.name.lower(), bucket.why_needed.lower()])
         parts.extend(p.lower() for p in bucket.search_phrases)
     text = " ".join(parts)
-    return any(hint in text for hint in _FORMAL_HINTS)
+    return bool(_FORMAL_PATTERN.search(text))
 
 
 def derive_constraints(structured: StructuredQuery) -> ContextConstraints:
