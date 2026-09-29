@@ -665,3 +665,23 @@ def test_trek_and_ethnic_shelves_only_when_the_request_calls_for_them(catalogue)
     assert any(s.startswith("Ethnic Wear/") for s in shelves)
     _, shelves = plan("clothes for an event next month", answers=["occasion:wedding"])
     assert any(s.startswith("Ethnic Wear/") for s in shelves)
+
+
+def test_hinglish_budget_and_relations_are_understood(catalogue):
+    """Live: "bhai ki shaadi ke liye kurta chahiye, 3000 tak" showed "Budget ·
+    ₹3,000 – ₹3,000" and asked "Who is this for?" about a brother."""
+    class _Kurta:
+        name = "i"
+        is_real = True
+
+        def structured(self, **_):
+            return {"intent_summary": "A kurta for a brother's wedding.", "is_shopping_request": True,
+                    "buckets": [{"name": "Kurta Set", "search_phrases": ["kurta set"], "why_needed": "x",
+                                 "role": "required", "catalogue_paths": ["Ethnic Wear/Kurta Sets"]}],
+                    "filters": {"price_min": 3000, "price_max": 3000},
+                    "context": {"recipient": "bhai"},
+                    "assumptions": []}
+
+    response = _response(catalogue, "bhai ki shaadi ke liye kurta chahiye, 3000 tak", _Kurta())
+    assert _budget(response) == ("Under ₹3,000", "known")
+    assert not any(v.name == "gender" and v.status == "needed" for v in response.context_variables)

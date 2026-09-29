@@ -130,7 +130,7 @@ _FLOOR_WORDS = re.compile(
     r"\b(above|over|from|between|at least|min(imum)?|starting)\b"
     r"|\d\s*k?\s*(-|–|to|and)\s*(rs\.?|₹)?\s*\d"
 )
-_CEILING_WORDS = re.compile(r"\b(under|below|less than|within|up ?to|max(imum)?)\b")
+_CEILING_WORDS = re.compile(r"\b(under|below|less than|within|up ?to|max(imum)?|tak|se kam|ke andar)\b")
 
 
 def stated_money(text: str) -> bool:
@@ -326,7 +326,10 @@ def _has_budget(structured: StructuredQuery, answered: set[str]) -> bool:
 _GENDERED_RECIPIENT = re.compile(
     r"\b(nephew|niece|son|daughter|brother|sister|wife|husband|mom|mother|mum|dad|father"
     r"|grandson|granddaughter|grandfather|grandmother|grandpa|grandma|uncle|aunt"
-    r"|boyfriend|girlfriend|boy|girl|man|woman)s?\b"
+    r"|boyfriend|girlfriend|boy|girl|man|woman"
+    # Hindi relations, as shoppers write them in Hinglish.
+    r"|bhai|bhaiya|didi|behen|bahen|maa|mummy|papa|beta|beti|chacha|chachi|mama|mami"
+    r"|nana|nani|dada|dadi|pati|patni)s?\b"
 )
 
 

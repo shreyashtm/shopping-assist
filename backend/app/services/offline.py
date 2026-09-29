@@ -285,6 +285,13 @@ _CEILING = re.compile(
 )
 
 
+# The ceiling word can follow the amount: Hinglish "3000 tak" (up to 3000),
+# or "5000 max". Live, "kurta chahiye, 3000 tak" showed "₹3,000 – ₹3,000".
+_CEILING_AFTER = re.compile(
+    rf"{_AMOUNT}\s*(?:tak|max(?:imum)?|or less|or below|and below|and under|se kam|ke andar)\b"
+)
+
+
 def _amount(digits: str, thousands: str | None) -> int:
     value = int(digits.replace(",", ""))
     return value * 1000 if thousands else value
@@ -301,7 +308,7 @@ def stated_filters(text: str) -> QueryFilters:
             price_min, price_max = low, high
             break
     if price_max is None:
-        m = _CEILING.search(text)
+        m = _CEILING.search(text) or _CEILING_AFTER.search(text)
         if m and _amount(m.group(1), m.group(2)) >= 100:
             price_max = _amount(m.group(1), m.group(2))
     return QueryFilters(gender=gender, price_min=price_min, price_max=price_max)
