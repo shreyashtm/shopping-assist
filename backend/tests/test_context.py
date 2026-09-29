@@ -406,3 +406,12 @@ def test_a_district_ranked_first_resolves_to_its_namesake_town(no_throttle):
     swiss = _area("Leh", 47.47, 9.26, "St. Gallen", "Switzerland", 47.45, 47.49, 9.24, 9.28)
     climate = _resolve("Leh", _GazetteerTransport(ranked=[district, town, swiss]))
     assert (climate.latitude, climate.longitude) == (34.16, 77.58)
+
+
+def test_a_known_trek_has_its_own_point():
+    """Live: no gazetteer knows "Hampta Pass", so its weather rested on the
+    model recalling coordinates -- right on Claude Haiku, wrong on qwen3:8b."""
+    from app.services.context import known_trek_point
+
+    assert known_trek_point("Hampta Pass, Himachal Pradesh") == (32.27, 77.37, 4270)
+    assert known_trek_point("Manali") is None

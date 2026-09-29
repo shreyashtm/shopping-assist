@@ -68,6 +68,11 @@ class ResponseMeta(BaseModel):
     degraded_mode: bool = False
     catalogue_size: int = 0
     notes: list[str] = Field(default_factory=list)
+    stage_ms: dict[str, int] = Field(
+        default_factory=dict,
+        description="Milliseconds per stage (interpret, conditions, search), for "
+        "finding where a slow request spent its time.",
+    )
 
 
 class RecommendResponse(BaseModel):

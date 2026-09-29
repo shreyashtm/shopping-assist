@@ -257,6 +257,12 @@ _OUTDOOR_ONLY_SHELVES = {
     "Outdoor & Camping Gear/Trekking Equipment",
 }
 HIGH_ALTITUDE_M = 2500
+_TREK_WORDS = re.compile(r"\b(trek\w*|hik(e|es|ing)|expedition|mountaineering)\b")
+_TOWN_FOOTWEAR = {
+    "Footwear/Casual Sneakers", "Footwear/Formal Shoes", "Footwear/Flats",
+    "Footwear/Heels", "Footwear/Ethnic Footwear",
+}
+_TOWN_FOOTWEAR_NAMED = re.compile(r"\b(sneakers?|casual shoes|formal shoes|flats|heels|mojaris?|juttis?)\b")
 
 
 def shelf_called_for(path: str, text: str, elevation_m: float | None) -> bool:
@@ -267,6 +273,10 @@ def shelf_called_for(path: str, text: str, elevation_m: float | None) -> bool:
         return bool(_OUTDOOR_WORDS.search(lowered)) or (elevation_m or 0) >= HIGH_ALTITUDE_M
     if path.startswith("Ethnic Wear/"):
         return bool(_ETHNIC_WORDS.search(lowered))
+    # On a trek, shoes are boots, trail shoes or sandals. Live, a Hampta Pass
+    # follow-up for "more shoes" showed skateboard sneakers and Heelys.
+    if path in _TOWN_FOOTWEAR and _TREK_WORDS.search(lowered):
+        return bool(_TOWN_FOOTWEAR_NAMED.search(lowered))
     return True
 
 
@@ -455,6 +465,70 @@ def _is_specific_trip(structured: StructuredQuery) -> bool:
     return bool(ctx.location and ctx.start_date and _implies_trek(text))
 
 
+_EXACT_DAY = re.compile(
+    rf"\b\d{{1,2}}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:{_MONTHS})\b|\b(?:{_MONTHS})\s+\d{{1,2}}(?:st|nd|rd|th)?\b"
+    r"|\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b"
+)
+
+
+def _date_range_label(start: date, end: date | None) -> str:
+    """"24–29 Oct 2026", readable at a glance."""
+    if end is None or end == start:
+        return f"{start.day} {start:%b %Y}"
+    if (start.year, start.month) == (end.year, end.month):
+        return f"{start.day}–{end.day} {start:%b %Y}"
+    if start.year == end.year:
+        return f"{start.day} {start:%b} – {end.day} {end:%b %Y}"
+    return f"{start.day} {start:%b %Y} – {end.day} {end:%b %Y}"
+
+
+def _conditions_label(climate) -> str | None:
+    if climate.temp_min_c is None and climate.temp_max_c is None:
+        return None
+    parts = []
+    if climate.temp_min_c is not None:
+        parts.append(f"nights {round(climate.temp_min_c)}°C")
+    if climate.temp_max_c is not None:
+        parts.append(f"days {round(climate.temp_max_c)}°C")
+    if climate.precipitation_mm is not None:
+        parts.append(f"{round(climate.precipitation_mm)} mm rain")
+    return ", ".join(parts)
+
+
+# First match wins, most specific first.
+_OCCASION_LABELS = [
+    (r"\btrek\w*|\bhik(e|es|ing)\b|\bexpedition\b", "Trekking"),
+    (r"\bcamp(s|ing)?\b", "Camping"),
+    (r"\bski(ing)?\b|\bsnow\b", "Snow trip"),
+    (r"\banniversary\b", "Anniversary"),
+    (r"\bwedding|\bshaadi\b|\breception\b|\bsangeet\b", "Wedding"),
+    (r"\bbirthday\b", "Birthday"),
+    (r"\bdiwali\b|\bholi\b|\beid\b|\bfestiv\w*|\bnavratri\b|\bpuja\b|\bchristmas\b", "Festival"),
+    (r"\binterview\b", "Interview"),
+    (r"\boffice\b|\bwork\b|\bmeeting\b|\bconference\b", "Office"),
+    (r"\bparty\b|\bparties\b|\bdate night\b", "Party"),
+    (r"\bgym\b|\bworkout\b|\brunning\b", "Workout"),
+    (r"\bbeach\b", "Beach holiday"),
+    (r"\bcollege\b|\bschool\b", "College"),
+    (r"\bgifts?\b|\bpresent\b|\bhampers?\b", "Gift"),
+    (r"\btrip\b|\btravel\w*|\bvacation\b|\bholiday\b|\bgetaway\b", "Travel"),
+]
+
+
+def _occasion_label(text: str) -> str | None:
+    lowered = text.lower()
+    return next((label for pattern, label in _OCCASION_LABELS if re.search(pattern, lowered)), None)
+
+
+def _answered_occasion(answers: list[str]) -> str | None:
+    for answer in answers:
+        for pair in answer.split(","):
+            key, _, value = pair.partition(":")
+            if key.strip() in {"occasion", "use_case"} and value.strip():
+                return value.strip().replace("-", " ").capitalize()
+    return None
+
+
 def build_context_variables(
     structured: StructuredQuery, answers: list[str], request_text: str = ""
 ) -> list[ContextVariable]:
@@ -484,16 +558,17 @@ def build_context_variables(
         slots.append(ContextVariable(name="trip_type", label="Trip", status="needed"))
 
     if ctx.start_date:
-        date_label = ctx.start_date.isoformat()
-        if ctx.end_date and ctx.end_date != ctx.start_date:
-            date_label = f"{ctx.start_date.isoformat()} – {ctx.end_date.isoformat()}"
         slots.append(
             ContextVariable(
                 name="dates",
                 label="Dates",
                 status="known",
-                source="user" if ctx.duration_days else "inferred",
-                value=date_label,
+                # Only a day the shopper named is theirs. Live, "the last week
+                # of October for 6 days" showed "2026-10-24 – 2026-10-29
+                # (you)": the model's pick of days, labelled as the shopper's.
+                source="user" if _EXACT_DAY.search(request_text.lower()) or "start_date" in answered
+                else "inferred",
+                value=_date_range_label(ctx.start_date, ctx.end_date),
             )
         )
     elif ctx.location and _implies_dated_trip(text):
@@ -509,7 +584,10 @@ def build_context_variables(
                     label="Conditions",
                     status="known",
                     source=source,
-                    value=climate.summary or ctx.climate_note,
+                    # The numbers, not the sentence: the chip shows 48
+                    # characters, and live it read "Typical conditions for
+                    # Hampta Pass, Himachal Pra" with no temperature at all.
+                    value=_conditions_label(climate) or climate.summary or ctx.climate_note,
                 )
             )
         elif climate.source == "unobtainable":
@@ -561,8 +639,12 @@ def build_context_variables(
                 name="occasion",
                 label="Occasion",
                 status="known",
-                source="inferred" if "occasion" not in answered else "user",
-                value="from your request",
+                source="user" if _occasion_label(request_text) or {"occasion", "use_case"} & answered
+                else "inferred",
+                # Live: "trekking Hampta Pass" showed "Occasion · from your
+                # request (inferred)" -- say which occasion, and that it's theirs.
+                value=_answered_occasion(answers) or _occasion_label(request_text)
+                or _occasion_label(text) or "from your request",
             )
         )
     elif _implies_apparel(text) and not _is_specific_trip(structured):

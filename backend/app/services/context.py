@@ -110,6 +110,29 @@ def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     return 2 * radius * math.asin(math.sqrt(a))
 
 
+# Popular treks no gazetteer holds: Nominatim and Open-Meteo both return
+# nothing for "Hampta Pass", so its weather rested on the model recalling
+# coordinates -- right once on Claude Haiku, wrong on qwen3:8b. These points
+# still go through the elevation check, so a bad entry can only fall back to
+# "unverified", never to wrong weather. (lat, lon, known elevation in metres;
+# Open-Meteo measured 4516, 3733, 4660, 3396, 2532, 2919 m at them.)
+KNOWN_TREK_POINTS: dict[str, tuple[float, float, float]] = {
+    "hampta pass": (32.27, 77.37, 4270),
+    "kedarkantha": (31.02, 78.17, 3800),
+    "roopkund": (30.26, 79.73, 5029),
+    "sandakphu": (27.10, 88.00, 3636),
+    "triund": (32.26, 76.35, 2850),
+    "kheerganga": (31.99, 77.51, 2960),
+}
+
+
+def known_trek_point(location: str | None) -> tuple[float, float, float] | None:
+    if not location:
+        return None
+    head = location.split(",")[0].strip().lower()
+    return next((point for name, point in KNOWN_TREK_POINTS.items() if head.startswith(name)), None)
+
+
 def elevation_agrees(measured_m: float, estimated_m: float | None) -> bool:
     """Whether a measured elevation corroborates the model's estimate.
 

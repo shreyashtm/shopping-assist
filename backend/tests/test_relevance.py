@@ -898,3 +898,81 @@ def test_a_kind_of_trip_answer_replans(catalogue):
     _response(catalogue, query, planner)
     _response(catalogue, query, planner, answers=["use_case:beach holiday"])
     assert planner.calls == 2
+
+
+HAMPTA = "I'm a man trekking Hampta Pass the last week of October for 6 days, budget under 15000. What do I need?"
+
+
+def _trek_plan(footwear_paths=("Footwear/Boots",), dates=True):
+    class _Model:
+        name = "i"
+        is_real = True
+
+        def structured(self, **_):
+            context = {"start_date": "2026-10-24", "end_date": "2026-10-29", "duration_days": 6} if dates else {}
+            return {"intent_summary": "Trek kit.", "is_shopping_request": True,
+                    "buckets": [{"name": "Shoes", "search_phrases": ["shoes"], "why_needed": "x",
+                                 "role": "recommended", "catalogue_paths": list(footwear_paths)}],
+                    "filters": {"gender": "men", "price_max": 15000},
+                    "context": context, "assumptions": []}
+    return _Model()
+
+
+def test_dates_the_model_picked_are_labelled_as_its_guess(catalogue):
+    """Live, deployed: "the last week of October for 6 days" showed "Dates ·
+    2026-10-24 – 2026-10-29 (you)"; the shopper named no days."""
+    shown = {v.name: v for v in _response(catalogue, HAMPTA, _trek_plan(), skip_clarification=True).context_variables}
+    assert (shown["dates"].value, shown["dates"].source) == ("24–29 Oct 2026", "inferred")
+    exact = _response(catalogue, "trekking Hampta Pass from 24 October for 6 days", _trek_plan(),
+                      skip_clarification=True)
+    assert {v.name: v for v in exact.context_variables}["dates"].source == "user"
+
+
+def test_the_occasion_is_named(catalogue):
+    """Live, deployed: "trekking Hampta Pass" showed "Occasion · from your
+    request (inferred)"."""
+    shown = {v.name: v for v in _response(catalogue, HAMPTA, _trek_plan(), skip_clarification=True).context_variables}
+    assert (shown["occasion"].value, shown["occasion"].source) == ("Trekking", "user")
+
+
+def test_conditions_are_shown_as_numbers():
+    """Live, deployed: the chip read "Typical conditions for Hampta Pass,
+    Himachal Pra" -- cut at 48 characters, before any temperature."""
+    from app.schemas.query import ClimateContext
+    from app.services.context_slots import _conditions_label
+
+    label = _conditions_label(ClimateContext(source="climatological", temp_min_c=-14.2,
+                                             temp_max_c=2.4, precipitation_mm=4.0))
+    assert label == "nights -14°C, days 2°C, 4 mm rain" and len(label) <= 48
+
+
+def test_a_trek_does_not_get_town_shoes(catalogue):
+    """Live, deployed: "show me more shoes" after a Hampta Pass trek showed
+    skateboard sneakers and Heelys as camp shoes."""
+    response = _response(catalogue, HAMPTA, _trek_plan(("Footwear/Casual Sneakers", "Footwear/Boots")),
+                         skip_clarification=True)
+    shelves = {i.product.subcategory for g in response.groups for i in g.items}
+    assert "Casual Sneakers" not in shelves and "Boots" in shelves
+    asked = _response(catalogue, "casual sneakers for after my trek", _trek_plan(("Footwear/Casual Sneakers",)),
+                      skip_clarification=True)
+    assert asked.groups, "sneakers the shopper names are still allowed"
+
+
+def test_a_follow_up_keeps_the_conditions_already_measured():
+    """Live, deployed: the follow-up "sort the best picks from above and show
+    me more shoes" re-looked-up Hampta Pass, failed, and showed conditions as
+    unverified although the first turn had measured them."""
+    from app.schemas.query import ClimateContext, ResolvedContext, StructuredQuery
+    from app.services.recommend import _carry_earlier_context, _plan_key, context_cache
+
+    measured = ResolvedContext(location="Hampta Pass, Himachal Pradesh",
+                               climate=ClimateContext(source="climatological", temp_min_c=-14, temp_max_c=2))
+    context_cache.set(_plan_key(HAMPTA), measured)
+    follow_up = f"Earlier request: {HAMPTA}\nFollow-up: sort the best picks from above and show me more shoes"
+    plan = StructuredQuery(intent_summary="More shoes.", buckets=[{"name": "Shoes", "why_needed": "x"}],
+                           context=ResolvedContext(location="Hampta Pass"))
+    carried = _carry_earlier_context(plan, follow_up)
+    assert carried.context.climate is not None and carried.context.climate.temp_min_c == -14
+    elsewhere = plan.model_copy(update={"context": ResolvedContext(location="Goa")})
+    assert _carry_earlier_context(elsewhere, follow_up).context.location == "Goa"
+    context_cache.clear()

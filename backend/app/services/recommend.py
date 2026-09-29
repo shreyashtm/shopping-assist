@@ -46,6 +46,7 @@ from app.services.context import (
     apply_climate_from_answers,
     build_climate_question,
     has_climate_answers,
+    known_trek_point,
     needs_place_climate,
     resolve_climate,
 )
@@ -160,6 +161,35 @@ _ABOUT_THE_REQUEST = re.compile(
 # The first turn's plan, kept so a follow-up answer can be applied to it
 # without another model call. Same lifetime as cached responses.
 plan_cache = ResponseCache()
+# The place and conditions each request established, for its follow-ups.
+context_cache = ResponseCache()
+_EARLIER_REQUEST = re.compile(r"^Earlier request:\s*(.+)$", re.M)
+
+
+def _own_request(query: str) -> str:
+    """The request a turn is about: the earlier one for a composed follow-up."""
+    m = _EARLIER_REQUEST.search(query)
+    return m.group(1).strip() if m else query
+
+
+def _carry_earlier_context(structured: StructuredQuery, query: str) -> StructuredQuery:
+    m = _EARLIER_REQUEST.search(query)
+    if not m:
+        return structured
+    earlier = context_cache.get(_plan_key(m.group(1).strip()))
+    if earlier is None:
+        return structured
+    ctx = structured.context
+    if ctx.location and not stated_place(earlier.location or "", ctx.location):
+        return structured  # the follow-up moved somewhere else
+    carried = earlier.model_copy(update={
+        "recipient": ctx.recipient or earlier.recipient,
+    })
+    return structured.model_copy(update={"context": carried})
+
+
+def elapsed_since(started: float) -> int:
+    return int((time.perf_counter() - started) * 1000)
 
 # Answers merge_answers() can apply to an existing plan: they narrow it.
 # Anything else changes what to search -- a gift type, or an occasion or kind
@@ -243,6 +273,17 @@ def _attach_climate(
 
     if not needs_place_climate(ctx):
         return structured, notes
+    # Already established on an earlier turn: don't look it up again.
+    if ctx.climate is not None and ctx.climate.has_numbers:
+        return structured, notes
+
+    proposed = (
+        ctx.location_lat,
+        ctx.location_lon,
+        float(ctx.elevation_estimate_m) if ctx.elevation_estimate_m is not None else None,
+    )
+    # A known trek's point outranks the model's recall of it.
+    proposed = known_trek_point(ctx.location) or proposed
 
     client = OpenMeteoClient()
     places = NominatimClient()
@@ -251,11 +292,9 @@ def _attach_climate(
             ctx,
             client,
             today,
-            proposed_lat=ctx.location_lat,
-            proposed_lon=ctx.location_lon,
-            proposed_elevation_m=float(ctx.elevation_estimate_m)
-            if ctx.elevation_estimate_m is not None
-            else None,
+            proposed_lat=proposed[0],
+            proposed_lon=proposed[1],
+            proposed_elevation_m=proposed[2],
             places=places,
         )
     finally:
@@ -408,6 +447,10 @@ def recommend_events(
     today = today or date.today()
     notes: list[str] = []
     llm_calls = 0
+    # Where the time goes, per request: returned in meta and logged. Live
+    # searches on the deployed app took 37-50s against ~8s measured for the
+    # model call alone, and nothing said which stage held the rest.
+    stage_ms: dict[str, int] = {}
     degraded = False
 
     key = cache_key(payload.query, payload.answers, payload.skip_clarification)
@@ -606,11 +649,21 @@ def recommend_events(
     )
 
     # --- 1b. Resolve conditions (Open-Meteo, no LLM) -----------------------
+    stage_ms["interpret"] = elapsed_since(started)
     yield "stage", "checking conditions"
+    # A typed follow-up ("sort the best picks and show me more shoes") is a
+    # new request to the model, which may not repeat the place's coordinates.
+    # Live, Hampta Pass -- known to no gazetteer -- then came back "could not
+    # be verified" though the first turn had measured it. The earlier turn's
+    # place and conditions carry over when the follow-up is about the same place.
+    structured = _carry_earlier_context(structured, payload.query)
     structured, climate_notes = _attach_climate(
         structured, payload.answers, today, payload.skip_clarification
     )
     notes.extend(climate_notes)
+    stage_ms["conditions"] = elapsed_since(started) - sum(stage_ms.values())
+    if structured.context.climate is not None and structured.context.climate.has_numbers:
+        context_cache.set(_plan_key(_own_request(payload.query)), structured.context)
 
     structured, context_variables = apply_context_audit(
         structured, payload.answers, today, request_text=payload.query
@@ -652,7 +705,10 @@ def recommend_events(
         )
 
     def elapsed() -> int:
-        return int((time.perf_counter() - started) * 1000)
+        total = int((time.perf_counter() - started) * 1000)
+        stage_ms.setdefault("search", total - sum(stage_ms.values()))
+        logger.info("Timings ms: %s total=%d llm_calls=%d", stage_ms, total, llm_calls)
+        return total
 
     # --- 2. Decline politely rather than inventing results ----------------
     if not structured.is_shopping_request:
@@ -665,7 +721,7 @@ def recommend_events(
                 "looking for and I'll find it."
             ),
             meta=ResponseMeta(
-                latency_ms=elapsed(), llm_calls=llm_calls,
+                latency_ms=elapsed(), llm_calls=llm_calls, stage_ms=stage_ms,
                 degraded_mode=degraded, catalogue_size=len(catalogue), notes=notes,
             ),
         )
@@ -819,7 +875,7 @@ def recommend_events(
             groups=preview_groups,
             unfilled_slots=preview_unfilled,
             meta=ResponseMeta(
-                latency_ms=elapsed(), llm_calls=llm_calls,
+                latency_ms=elapsed(), llm_calls=llm_calls, stage_ms=stage_ms,
                 degraded_mode=degraded, catalogue_size=len(catalogue), notes=notes,
             ),
         ))
@@ -839,6 +895,7 @@ def recommend_events(
             meta=ResponseMeta(
                 latency_ms=elapsed(),
                 llm_calls=llm_calls,
+                stage_ms=stage_ms,
                 degraded_mode=degraded,
                 catalogue_size=len(catalogue),
                 notes=notes,
