@@ -360,6 +360,16 @@ def recommend_events(
                 taxonomy=get_taxonomy(),
             )
             llm_calls += 1
+            # One line per plan: model output varies between calls, and twice an
+            # intermittent result (an empty page, a single card) could only be
+            # diagnosed by replaying the request to see what had been planned.
+            logger.info(
+                "Plan: %s | filters=%s",
+                "; ".join(
+                    f"{b.name} {b.catalogue_paths} x{b.max_items}" for b in structured.buckets
+                ),
+                structured.filters.model_dump(exclude_defaults=True),
+            )
         except LLMUnavailable as exc:
             logger.warning("Interpretation failed, degrading: %s", exc)
             structured = offline_interpret(payload.query, payload.answers)
