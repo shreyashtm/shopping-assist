@@ -325,6 +325,20 @@ def _asks_for_kit(keywords: tuple[str, ...], text: str) -> bool:
     return False
 
 
+def _plain_summary(query: str) -> str:
+    """The request as a shopper would say it.
+
+    A follow-up turn arrives composed by the frontend as "Earlier request:
+    ...", "Already established: ...", "Follow-up: ..." lines; echoed verbatim,
+    that internal wording became the page heading.
+    """
+    earlier = re.search(r"^Earlier request:\s*(.+)$", query, re.M)
+    follow_up = re.search(r"^Follow-up:\s*(.+)$", query, re.M)
+    if earlier and follow_up:
+        return f"{earlier.group(1).strip()} ({follow_up.group(1).strip()})"
+    return query.strip()
+
+
 def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
     text = query.lower()
     buckets: list[Bucket] = []
@@ -453,7 +467,7 @@ def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
         and not (q.slot == "gender" and stated.gender)
     ] if thin else []
     return StructuredQuery(
-        intent_summary=f"Looking for: {query.strip()}",
+        intent_summary=f"Looking for: {_plain_summary(query)}",
         buckets=buckets,
         # Categories are left unset: the per-slot paths already constrain
         # retrieval, and a global category filter would only narrow it further.

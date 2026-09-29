@@ -207,3 +207,11 @@ def test_traditional_wear_heading_quotes_the_garment_not_the_occasion():
                             "this December, I'm a woman, budget under 2000", []).buckets[0]
     assert b.name == "Traditional Wear"
     assert b.why_needed.startswith("You asked for “good traditional wear”")
+
+
+def test_a_follow_up_turn_is_summarised_in_plain_words():
+    """Live: the page heading read "Looking for: Earlier request: Suggest me
+    some t-shirts Follow-up: for men, under 800" -- the frontend's internal
+    composition of a follow-up turn, echoed verbatim."""
+    q = "Earlier request: Suggest me some t-shirts\nAlready established: Budget: ₹1,500\nFollow-up: for men, under 800"
+    assert build_offline_query(q, []).intent_summary == "Looking for: Suggest me some t-shirts (for men, under 800)"
