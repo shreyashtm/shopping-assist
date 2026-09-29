@@ -576,3 +576,92 @@ def test_a_gendered_recipient_is_not_asked_their_gender(catalogue):
     assert not any("gender" in q.lower() for q in asked), asked
     shown = {v.name: v.value for v in response.context_variables}
     assert shown.get("gender") != "unspecified"
+
+
+def test_a_wearer_is_kept_only_when_the_words_imply_one(catalogue):
+    """Live: "traditional wear for my friend's wedding" showed "For · men
+    (you)" while the same plan offered lehengas and sarees."""
+    cases = {
+        "traditional wear for my friend's wedding in March": None,
+        "a saree for my friend's wedding": "women",
+        "I'm a man trekking Hampta Pass": "men",
+        "thermals for my dad": "men",
+    }
+    for query, expected in cases.items():
+        response = _response(catalogue, query, _fills_in("Hampta Pass", "women" if expected == "women" else "men"),
+                             skip_clarification=True)
+        shown = {v.name: v.value for v in response.context_variables}
+        assert shown.get("gender") == expected, (query, shown.get("gender"))
+
+
+def test_premium_is_a_preference_not_a_price(catalogue):
+    """Live: "a premium gifting hamper" showed "Budget · ₹1,299 – ₹5,299
+    (you)", the hamper shelf's range copied from the prompt."""
+    response = _response(catalogue, "a premium gifting hamper for my parents' 25th anniversary",
+                         _invents_budget(1299, 5299), skip_clarification=True)
+    assert _budget(response) == (None, "needed")
+
+
+def test_a_couple_is_not_asked_for_one_gender(catalogue):
+    """Live: "my parents' 25th anniversary" was asked "Who is this for? Men /
+    Women"."""
+    class _Couple:
+        name = "i"
+        is_real = True
+
+        def structured(self, **_):
+            return {"intent_summary": "An anniversary hamper.", "is_shopping_request": True,
+                    "buckets": [{"name": "Hampers", "search_phrases": ["hamper"], "why_needed": "x",
+                                 "role": "required", "catalogue_paths": ["Gifting/Hampers"]}],
+                    "context": {"recipient": "parents"},
+                    "assumptions": []}
+
+    response = _response(catalogue, "a hamper for my parents' anniversary", _Couple())
+    assert not any(v.name == "gender" and v.status == "needed" for v in response.context_variables)
+    assert not any("who is this for" in q.question.lower() for q in (response.questions or []))
+
+
+def _plans(paths_by_group, elevation=None):
+    class _Model:
+        name = "i"
+        is_real = True
+
+        def structured(self, **_):
+            return {"intent_summary": "A trip.", "is_shopping_request": True,
+                    "buckets": [{"name": name, "search_phrases": [name.lower()], "why_needed": "x",
+                                 "role": "recommended", "catalogue_paths": paths}
+                                for name, paths in paths_by_group.items()],
+                    "context": {"elevation_estimate_m": elevation},
+                    "assumptions": []}
+    return _Model()
+
+
+TRIP_PLAN = {
+    "Warm Coat": ["Men's Apparel/Jackets & Coats"],
+    "Navigation & Safety": ["Outdoor & Camping Gear/Navigation & Safety"],
+    "Evening Wear": ["Ethnic Wear/Kurta Sets", "Men's Apparel/Formal Shirts"],
+}
+
+
+def test_trek_and_ethnic_shelves_only_when_the_request_calls_for_them(catalogue):
+    """Live, qwen3:8b: headlamps for "Europe in December" and kurta sets for
+    a Goa beach holiday -- a trek-shaped plan copied onto every trip."""
+    def plan(query, elevation=None, answers=()):
+        response = _response(catalogue, query, _plans(TRIP_PLAN, elevation),
+                             skip_clarification=True, answers=list(answers))
+        names = {g.name for g in response.groups}
+        shelves = {f"{i.product.category}/{i.product.subcategory}" for g in response.groups for i in g.items}
+        return names, shelves
+
+    names, shelves = plan("going to Europe in December for two weeks")
+    assert "Navigation & Safety" not in names
+    assert not any(s.startswith("Ethnic Wear/") for s in shelves)
+
+    names, _ = plan("trekking Hampta Pass in October")
+    assert "Navigation & Safety" in names
+    names, _ = plan("Going to Leh for 10 days in January", elevation=3500)
+    assert "Navigation & Safety" in names, "a high destination calls for it without the word trek"
+    _, shelves = plan("clothes for my friend's wedding")
+    assert any(s.startswith("Ethnic Wear/") for s in shelves)
+    _, shelves = plan("clothes for an event next month", answers=["occasion:wedding"])
+    assert any(s.startswith("Ethnic Wear/") for s in shelves)

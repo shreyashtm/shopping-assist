@@ -118,10 +118,10 @@ def stated_dates(text: str) -> bool:
     return bool(_STATED_DATES.search(text.lower()))
 
 
-_STATED_MONEY = re.compile(
-    r"₹|\brs\.?\b|\binr\b|rupee|budget|\bcheap|affordable|premium|luxur|expensive"
-    r"|thousand|lakh|grand\b|\d\s*k\b"
-)
+# Only an amount is a stated price. Live, "a premium gifting hamper" kept
+# the model's ₹1,299-5,299, the hamper shelf's range copied from the prompt,
+# as the shopper's own budget. "Premium" or "cheap" is a preference, not a number.
+_STATED_MONEY = re.compile(r"thousand|lakh|grand\b|\d\s*k\b")
 # A number is a price unless it counts time or is a year: "10 days in
 # January" states no budget, and the model's ₹1,000-20,000 survived on it.
 _NUMBER = re.compile(r"\b(\d[\d,]*)\b(?!\s*(?:-|–|to)?\s*\d*\s*(?:days?|nights?|weeks?|months?|years?|yrs?"
@@ -172,6 +172,56 @@ def stated_place(location: str, text: str) -> bool:
 
 def stated_wearer(text: str) -> bool:
     return bool(_STATED_WEARER.search(text.lower()))
+
+
+# Items worn by one gender, so naming one says who the wearer is.
+_GENDERED_ITEM = re.compile(
+    r"\b(sarees?|saris?|lehengas?|kurtis?|salwar|dupattas?|blouses?|dresses|dress|skirts?"
+    r"|heels|handbags?|clutch(es)?|sherwanis?|dhotis?|beard|kids?|child|children|baby)\b"
+)
+
+
+def wearer_implied(text: str) -> bool:
+    """Whether the shopper's words say who will wear it: stated outright,
+    through a relation ("my nephew"), or through the item ("a saree")."""
+    lowered = text.lower()
+    return bool(
+        _STATED_WEARER.search(lowered)
+        or _GENDERED_RECIPIENT.search(lowered)
+        or _GENDERED_ITEM.search(lowered)
+        or "unisex" in lowered
+    )
+
+
+# Shelves only some requests call for. Live, qwen3:8b planned headlamps and
+# navigation gear for "Europe in December" and kurta sets for a Goa beach
+# holiday, copying a trek-shaped plan onto every trip.
+_OUTDOOR_WORDS = re.compile(
+    r"\b(trek\w*|hik(e|es|ing)|camp(s|ing)?|mountains?|pass|expedition|altitude|outdoors?"
+    r"|adventure|ski(ing)?|snow|trails?|climb\w*|backpack(ing)?|himalaya\w*|safari|jungle)\b"
+)
+_ETHNIC_WORDS = re.compile(
+    r"\b(wedding|shaadi|marriage|festiv\w*|diwali|holi|eid|puja|pooja|navratri|garba|sangeet"
+    r"|mehendi|mehndi|haldi|reception|traditional|ethnic|kurtas?|kurtis?|sarees?|saris?|lehengas?"
+    r"|sherwanis?|nehru|dhotis?|temple|ceremony|pongal|onam|durga|rakhi|karwa)\b"
+)
+_OUTDOOR_ONLY_SHELVES = {
+    "Outdoor & Camping Gear/Camp & Sleep",
+    "Outdoor & Camping Gear/Navigation & Safety",
+    "Outdoor & Camping Gear/Trekking Equipment",
+}
+HIGH_ALTITUDE_M = 2500
+
+
+def shelf_called_for(path: str, text: str, elevation_m: float | None) -> bool:
+    """Whether the shopper's words (or a high destination) call for a shelf
+    that suits only some requests; every other shelf is always allowed."""
+    lowered = text.lower()
+    if path in _OUTDOOR_ONLY_SHELVES:
+        return bool(_OUTDOOR_WORDS.search(lowered)) or (elevation_m or 0) >= HIGH_ALTITUDE_M
+    if path.startswith("Ethnic Wear/"):
+        return bool(_ETHNIC_WORDS.search(lowered))
+    return True
 
 
 def has_budget_answers(answers: list[str]) -> bool:
@@ -280,12 +330,19 @@ _GENDERED_RECIPIENT = re.compile(
 )
 
 
+# A couple or a group has no single wearer to ask about. Live, "my parents'
+# 25th anniversary" and "Bhaiya Bhabhi's anniversary" were asked "Who is this
+# for? Men / Women".
+_GROUP_RECIPIENT = re.compile(r"\b(parents|couple|in-laws|family|bhaiya bhabhi)\b|\band\b|&")
+
+
 def _has_gender(structured: StructuredQuery, answered: set[str]) -> bool:
     recipient = (structured.context.recipient or "").lower()
     return bool(
         structured.filters.gender
         or "gender" in answered
         or _GENDERED_RECIPIENT.search(recipient)
+        or _GROUP_RECIPIENT.search(recipient)
     )
 
 

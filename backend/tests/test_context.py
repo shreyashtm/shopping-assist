@@ -345,6 +345,14 @@ def test_a_model_point_outside_the_area_is_not_trusted(no_throttle):
     assert climate.source == "unobtainable"
 
 
+def test_a_continent_is_too_broad_even_with_a_model_point(no_throttle):
+    """Live: qwen3:8b gave "Europe" a point at 36 m, and the page showed
+    "Typical conditions for Europe: nights to 1 C" for the whole continent."""
+    europe = _area("Europe", 51.0, 10.0, None, None, 34.0, 71.0, -25.0, 45.0)
+    climate = _resolve("Europe", _GazetteerTransport(ranked=[europe]), lat=51.0, lon=10.0)
+    assert climate.source == "unobtainable"
+
+
 def test_a_small_area_is_still_a_point(no_throttle):
     goa = _area("Goa", 15.3, 74.08, "Goa", "India", 14.9, 15.8, 73.7, 74.3)
     assert _resolve("Goa", _GazetteerTransport(ranked=[goa])).place_resolved == "Goa, India"

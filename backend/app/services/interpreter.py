@@ -183,10 +183,17 @@ country or region ("India - unspecified city") to fill the field. A generic
 
 ## Buckets
 
-Split the need into 2-5 buckets, each a distinct category of thing to buy
-(e.g. "Layering & Insulation", "Footwear", "Navigation & Safety"). Search runs
-once per bucket, so buckets are what stop a trek request returning ten jackets
-and no headlamp.
+Split the need into 2-5 buckets, each a distinct category of thing to buy,
+named for *this* request. A trek might need "Layering & Insulation",
+"Footwear" and "Navigation & Safety"; a city trip in winter needs a warm coat,
+walking shoes and a daypack; a beach holiday needs light clothes, sandals and
+swimwear. Search runs once per bucket, so buckets are what stop a trek request
+returning ten jackets and no headlamp.
+
+Plan outdoor gear (headlamps, navigation, camping, trekking poles) only for a
+trek, hike, camp or remote mountain trip. Plan ethnic wear only when the
+request names an occasion or item that calls for it (a wedding, a festival,
+a kurta, a saree). A city break or a beach holiday needs neither.
 
 `search_phrases` must be written in *catalogue* language -- how a product
 listing would describe itself -- not in the user's language. The user says

@@ -52,11 +52,12 @@ from app.services.context_slots import (
     has_budget_answers,
     has_date_answers,
     is_specific_trip,
+    shelf_called_for,
     stated_dates,
     stated_money,
     stated_place,
-    stated_wearer,
     states_only_ceiling,
+    wearer_implied,
 )
 from app.services.explain import explain_pick
 from app.services.interpreter import (
@@ -456,12 +457,28 @@ def recommend_events(
     if not ctx.location and ctx.climate_note:
         structured = structured.model_copy(update={"context": ctx.model_copy(update={"climate_note": None})})
     filters = structured.filters
-    # Only a real wearer narrows the search; "unspecified", "both" or
-    # "unisex" the shopper never said is filler shown as their own words.
-    gender = (filters.gender or "").lower()
-    if (gender and gender not in {"men", "women", "kids"} and not stated_wearer(payload.query)
-            and "unisex" not in payload.query.lower()):
+    # A wearer the shopper's words don't imply is the model's guess, shown
+    # as theirs: "For · men (you)" for "my friend's wedding" while the same
+    # plan offered lehengas and sarees, and "For · unspecified (you)".
+    if filters.gender and not wearer_implied(payload.query):
         structured = structured.model_copy(update={"filters": filters.model_copy(update={"gender": None})})
+
+    # Shelves the request doesn't call for come out of the plan; a group left
+    # with none was never asked for, so it goes too, rather than being
+    # reported as something the catalogue couldn't cover.
+    elevation = structured.context.elevation_estimate_m
+    asked = " ".join([payload.query, *payload.answers])
+    buckets = []
+    for bucket in structured.buckets:
+        paths = [p for p in bucket.catalogue_paths if shelf_called_for(p, asked, elevation)]
+        if bucket.catalogue_paths and not paths:
+            logger.info("Dropped group %r: its shelves don't fit this request", bucket.name)
+            continue
+        if paths != bucket.catalogue_paths:
+            bucket = bucket.model_copy(update={"catalogue_paths": paths})
+        buckets.append(bucket)
+    if buckets != structured.buckets:
+        structured = structured.model_copy(update={"buckets": buckets})
 
     if payload.answers:
         structured = merge_answers(structured, payload.answers)

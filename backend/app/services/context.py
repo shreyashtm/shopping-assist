@@ -92,6 +92,12 @@ _miss_cache = ResponseCache(ttl_seconds=60 * 60 * 24, max_entries=512)
 # area is measured.
 MAX_POINT_EXTENT_DEG = 1.5
 
+# The widest area a model's point may pin down. Within a state (Ladakh is 4
+# degrees wide, Rajasthan 8) the point says which part is meant. Live, qwen3:8b
+# gave "Europe" a point at 36 m, and the page showed one reading for a whole
+# continent; for a country or continent any point is arbitrary.
+MAX_AREA_FOR_MODEL_POINT_DEG = 10.0
+
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     radius = 6371.0
@@ -397,7 +403,12 @@ def _locate(
         # An area, not a place: its centroid's weather is nobody's trip.
         if has_proposal:
             # A model point inside the area, whose elevation checks out, says
-            # which part is meant.
+            # which part is meant -- unless the area is too wide for any one
+            # point to stand for it.
+            if (chosen.extent_deg or 0) > MAX_AREA_FOR_MODEL_POINT_DEG:
+                logger.info("%r is %.0f deg wide, too broad for one point", location, chosen.extent_deg)
+                miss()
+                return None
             if not _contains(chosen, proposed_lat, proposed_lon):
                 miss()
                 return None
