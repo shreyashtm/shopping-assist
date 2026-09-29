@@ -28,6 +28,7 @@ def test_health_reports_capabilities(client):
     assert "catalogue_loaded" in body
 
 
+@pytest.mark.live
 def test_recommend_returns_grouped_results_with_reasons_and_links(client):
     res = client.post(
         "/api/v1/recommend",
@@ -62,6 +63,7 @@ def test_recommend_rejects_too_short_query(client):
     assert client.post("/api/v1/recommend", json={"query": "a"}).status_code == 422
 
 
+@pytest.mark.live
 def test_vague_request_asks_before_recommending(client):
     """The adaptive branch: a request with no occasion, budget or audience
     should still ask, but must not stall on the question alone -- retrieval
@@ -86,6 +88,7 @@ def test_vague_request_asks_before_recommending(client):
             assert option["label"] and option["value"]
 
 
+@pytest.mark.live
 def test_specific_request_skips_straight_to_results(client):
     """A request that already states trip, dates and activity should not be
     interrogated -- asking would be obstructive, not helpful."""
@@ -103,6 +106,7 @@ def test_specific_request_skips_straight_to_results(client):
     assert first["retailer"] in {"Amazon.in", "Myntra", "Amazon.com (2024 archive)"}
 
 
+@pytest.mark.live
 def test_answers_move_a_vague_request_to_results(client):
     """Once the needed context slots are filled, the same query returns products."""
     res = client.post(
@@ -119,6 +123,7 @@ def test_answers_move_a_vague_request_to_results(client):
     assert res.json()["mode"] == "results"
 
 
+@pytest.mark.live
 def test_skip_clarification_forces_results(client):
     res = client.post(
         "/api/v1/recommend",
@@ -127,6 +132,7 @@ def test_skip_clarification_forces_results(client):
     assert res.json()["mode"] == "results"
 
 
+@pytest.mark.live
 def test_missing_timing_on_a_trek_is_worth_asking_about(client):
     """A trek with no dates is genuinely ambiguous: the same pass needs very
     different gear in June and in December. The assistant should ask rather

@@ -32,6 +32,9 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "live: calls the configured LLM provider for real; skipped unless RUN_LIVE_TESTS=1",
+]
 
 [dependency-groups]
 dev = [

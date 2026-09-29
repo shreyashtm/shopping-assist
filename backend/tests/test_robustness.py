@@ -159,6 +159,7 @@ def test_off_topic_request_declines_without_inventing_products(catalogue):
     not __import__("app.core.config", fromlist=["get_settings"]).get_settings().anthropic_api_key,
     reason="needs a real API key to exercise the live interpret path",
 )
+@pytest.mark.live
 def test_completed_search_uses_evidence_based_explanations(catalogue):
     """One LLM call; explanations come from retrieval evidence, not a ranker."""
     from app.core.deps import load_provider, load_taxonomy
@@ -189,6 +190,7 @@ def test_completed_search_uses_evidence_based_explanations(catalogue):
             assert item.reason, "every product still needs an explanation"
 
 
+@pytest.mark.live
 def test_unmapped_required_slot_is_reported_not_substituted(catalogue):
     """The original defect, end to end.
 

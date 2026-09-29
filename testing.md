@@ -9,6 +9,14 @@ cd backend
 uv run pytest
 ```
 
+This runs offline and needs no API key. Tests marked `live` call the LLM
+provider configured in `backend/.env` for real, so they are skipped unless
+asked for; on a free-tier key each run spends daily quota:
+
+```bash
+RUN_LIVE_TESTS=1 uv run pytest -m live
+```
+
 The suite is written around important behavioural claims rather than raw line
 coverage.
 
@@ -20,6 +28,8 @@ coverage.
 | `test_context.py` | elevation corroboration, nearest-place selection, provenance |
 | `test_api_contract.py` | response shape, clarify vs results, answers, skip |
 | `test_context_slots.py` | which planning variables count as needed |
+| `test_relevance.py` | whether the cards shown match what was asked for, judged from the shopper's side on the real catalogue |
+| `test_offline.py` | keyword-fallback routing: word boundaries, modifiers, purpose phrases, request order |
 
 Important regression examples:
 
