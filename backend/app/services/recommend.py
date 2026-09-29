@@ -28,7 +28,7 @@ from app.adapters.embeddings.local import get_embedder
 from app.adapters.llm.base import LLMProvider, LLMUnavailable
 from app.adapters.weather.nominatim import NominatimClient
 from app.adapters.weather.open_meteo import OpenMeteoClient
-from app.core.cache import cache_key, response_cache
+from app.core.cache import ResponseCache, cache_key, response_cache
 from app.core.config import get_settings
 from app.core.deps import get_taxonomy
 from app.schemas.query import Bucket, ClarifyingQuestion, QueryFilters, StructuredQuery
@@ -155,6 +155,41 @@ FAMILY_GIFTS = Bucket(
 _ABOUT_THE_REQUEST = re.compile(
     r"\b(the user|the shopper|the customer|the request|too generic|too vague)\b", re.I
 )
+
+
+# The first turn's plan, kept so a follow-up answer can be applied to it
+# without another model call. Same lifetime as cached responses.
+plan_cache = ResponseCache()
+
+# Answers merge_answers() can apply to an existing plan. Anything else (a
+# gift type, a category) changes what to search, so it needs a fresh plan.
+_PLAN_PRESERVING_KEYS = frozenset({
+    "price_min", "price_max", "budget", "gender", "occasion", "use_case",
+    "start_date", "duration_days", "timing",
+})
+
+
+def _plan_key(query: str) -> str:
+    return cache_key(query, [], False)
+
+
+def _reusable_plan(payload: RecommendRequest) -> StructuredQuery | None:
+    """The first turn's plan, if this turn only answers its questions."""
+    if not payload.answers and not payload.skip_clarification:
+        return None
+    keys = {
+        pair.partition(":")[0].strip()
+        for answer in payload.answers
+        for pair in answer.split(",")
+    }
+    if not keys <= _PLAN_PRESERVING_KEYS:
+        return None
+    plan = plan_cache.get(_plan_key(payload.query))
+    if plan is None:
+        return None
+    # As interpret() does when answers are supplied: they settle the matter,
+    # and asking again would trap the shopper in a loop.
+    return plan.model_copy(deep=True, update={"needs_clarification": False, "questions": []})
 
 
 def _next_year(day: date, today: date) -> date:
@@ -393,6 +428,13 @@ def recommend_events(
         structured = offline_interpret(payload.query, payload.answers)
         degraded = True
         notes.append("No LLM configured; used keyword interpretation.")
+    elif (reused := _reusable_plan(payload)) is not None:
+        # A chip answer that only sets budget, wearer, occasion or dates is
+        # applied to the first turn's plan by code. Re-reading the request
+        # cost a second model call and could replan from scratch: live, a
+        # budget answer turned a girlfriend's gift from clothing to accessories.
+        structured = reused
+        logger.info("Reused the first turn's plan; answers applied by code")
     else:
         try:
             structured = interpret(
@@ -406,6 +448,8 @@ def recommend_events(
                 taxonomy=get_taxonomy(),
             )
             llm_calls += 1
+            if not payload.answers:
+                plan_cache.set(_plan_key(payload.query), structured.model_copy(deep=True))
             # One line per plan: model output varies between calls, and twice an
             # intermittent result (an empty page, a single card) could only be
             # diagnosed by replaying the request to see what had been planned.

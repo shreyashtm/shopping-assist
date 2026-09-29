@@ -21,3 +21,14 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         if "live" in item.keywords:
             item.add_marker(skip)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_plan_cache():
+    """The first turn's plan is reused by later turns of the same request;
+    one test's fake plan must never answer another test's follow-up."""
+    from app.services.recommend import plan_cache
+
+    plan_cache.clear()
+    yield
+    plan_cache.clear()

@@ -805,3 +805,45 @@ def test_a_named_recipient_is_known_even_when_the_model_omits_it(catalogue):
     response = _response(catalogue, "something nice for my girlfriend", _fills_in(None, "women"),
                          skip_clarification=True)
     assert response.context.recipient == "girlfriend"
+
+
+class _CountingPlanner:
+    """A different plan on every call, so a replan is visible."""
+    name = "c"
+    is_real = True
+
+    def __init__(self):
+        self.calls = 0
+
+    def structured(self, **_):
+        self.calls += 1
+        path = "Women's Apparel/Tops & T-Shirts" if self.calls == 1 else "Watches & Jewellery/Jewellery"
+        return {"intent_summary": "A gift for a girlfriend.", "is_shopping_request": True,
+                "buckets": [{"name": f"Plan {self.calls}", "search_phrases": ["gift"], "why_needed": "x",
+                             "role": "recommended", "catalogue_paths": [path]}],
+                "needs_clarification": True,
+                "questions": [{"slot": "budget", "question": "Roughly what budget?", "options": [
+                    {"label": "Under ₹1,000", "value": "price_max:1000"},
+                    {"label": "₹1,000 – 3,000", "value": "price_min:1000,price_max:3000"}]}],
+                "assumptions": []}
+
+
+def test_a_budget_answer_keeps_the_first_plan_without_another_call(catalogue):
+    """Live: a budget answer to "something nice for my girlfriend" re-ran the
+    model, which replanned from clothing to accessories."""
+    planner = _CountingPlanner()
+    query = "something nice for my girlfriend"
+    first = _response(catalogue, query, planner)
+    second = _response(catalogue, query, planner, answers=["price_min:1000,price_max:3000"])
+    assert planner.calls == 1
+    assert {g.name for g in second.groups} <= {g.name for g in first.groups} | {"Plan 1"}
+    assert second.meta.llm_calls == 0
+    assert _budget(second) == ("₹1,000 – ₹3,000", "known")
+
+
+def test_an_answer_that_changes_what_to_search_replans(catalogue):
+    planner = _CountingPlanner()
+    query = "something nice for my girlfriend"
+    _response(catalogue, query, planner)
+    _response(catalogue, query, planner, answers=["category:Watches & Jewellery"])
+    assert planner.calls == 2
