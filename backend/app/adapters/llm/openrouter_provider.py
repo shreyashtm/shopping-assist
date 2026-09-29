@@ -31,6 +31,8 @@ CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
 # full interpretation that fast, so it would only delay the fallback.
 MIN_HOP_S = 5.0
 
+MIN_OUTPUT_TOKENS = 8000
+
 
 class OpenRouterProvider:
     name = "openrouter"
@@ -101,7 +103,9 @@ class OpenRouterProvider:
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": model,
-            "max_tokens": max_tokens,
+            # A ceiling, not a target. Free reasoning models spend part of it
+            # thinking before they answer, and at 3,000 some returned no text.
+            "max_tokens": max(max_tokens, MIN_OUTPUT_TOKENS),
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},

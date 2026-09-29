@@ -91,10 +91,21 @@ Web-dashboard flow, no CLI or login needed.
    | `INTERPRET_TIMEOUT_S` | `90`. The 30s default aborts calls that would have succeeded on throttled hosting |
    | `CORS_ORIGINS` | the Vercel URL from step 3, e.g. `https://your-project.vercel.app` |
 
-   Optional, and only worth setting if the second provider is also **paid**:
-   `LLM_FALLBACK_PROVIDER` (must differ from the primary) plus
-   `FALLBACK_INTERPRET_MODEL` (a model id for the *fallback's* provider, not
-   the primary's).
+   Optional backup, used only when an Anthropic call fails (outage, rate
+   limit, exhausted credit). Without it those searches drop to keyword
+   matching and show "Reduced mode":
+   | Key | Value |
+   |---|---|
+   | `LLM_FALLBACK_PROVIDER` | `openrouter` (must differ from the primary) |
+   | `OPENROUTER_API_KEY` | your OpenRouter key |
+   | `FALLBACK_INTERPRET_MODEL` | an OpenRouter model id, not an Anthropic one, e.g. `nvidia/nemotron-3-super-120b-a12b:free` |
+   | `INTERPRET_FALLBACK_MODELS` | more OpenRouter models tried in order if that one fails, e.g. `dots-studio/dots-3-note-preview:free,qwen/qwen3.8-27b:free` |
+   | `FALLBACK_INTERPRET_TIMEOUT_S` | `75`. Free models take 13–70 s; without this the backup shares `INTERPRET_TIMEOUT_S` |
+
+   Only models listed with `structured_outputs` in OpenRouter's model list
+   work: every call requires the JSON schema to be enforced, so others are
+   refused. The free tier allows 50 free-model requests a day, shared across
+   all free models, so keep local testing off the key production uses.
 
 5. Settings → **Networking** → **Generate Domain**. Railway assigns no public
    URL until you ask for one — the `*.railway.internal` address it shows by

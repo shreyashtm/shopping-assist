@@ -102,3 +102,26 @@ def test_every_hop_gets_the_full_timeout():
 
     assert first.called_with_timeout == 30.0
     assert last.called_with_timeout == 30.0
+
+
+def test_a_hop_can_have_its_own_deadline():
+    """The free OpenRouter backup needs 13-70s where Anthropic needs about 8;
+    one shared 30s timeout cut the backup off before it could answer."""
+    seen = []
+
+    class _Records:
+        name = "r"
+        is_real = True
+
+        def __init__(self, fail):
+            self.fail = fail
+
+        def structured(self, *, timeout_s=None, **_):
+            seen.append(timeout_s)
+            if self.fail:
+                raise LLMUnavailable("down")
+            return {"ok": True}
+
+    chain = FallbackProvider([(_Records(True), "a"), (_Records(False), "b", 75.0)])
+    chain.structured(system="s", user="u", schema={}, model="x", timeout_s=30)
+    assert seen == [30, 75.0]

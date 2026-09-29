@@ -171,7 +171,7 @@ def load_provider() -> LLMProvider | None:
         # FallbackProvider ignores that argument and uses each hop's own model.
         from app.adapters.llm.fallback_provider import FallbackProvider
 
-        chain = [(fallback, settings.fallback_interpret_model)]
+        chain = [(fallback, settings.fallback_interpret_model, settings.fallback_interpret_timeout_s)]
         if primary is not None:
             chain.insert(0, (primary, settings.interpret_model))
         _provider = FallbackProvider(chain)

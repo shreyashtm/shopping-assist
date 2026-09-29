@@ -23,8 +23,12 @@ class FallbackProvider:
     name = "fallback"
     is_real = True
 
-    def __init__(self, chain: list[tuple[LLMProvider, str]]):
-        """`chain` is ordered (provider, model) pairs, first tried first.
+    def __init__(self, chain: list[tuple[LLMProvider, str] | tuple[LLMProvider, str, float | None]]):
+        """`chain` is ordered (provider, model) pairs, first tried first. A
+        third element, when given, replaces the caller's timeout for that hop:
+        a free OpenRouter backup needs 13-70s where Anthropic needs about 8,
+        so one shared timeout either cut the backup off or let a hung primary
+        hold the search for a minute.
 
         Falling through is driven by *failure*, never by elapsed time. Every
         hop gets the caller's full timeout, and only an `LLMUnavailable` --
@@ -42,7 +46,7 @@ class FallbackProvider:
         """
         if not chain:
             raise ValueError("FallbackProvider needs at least one (provider, model) pair")
-        self._chain = chain
+        self._chain = [(hop[0], hop[1], hop[2] if len(hop) > 2 else None) for hop in chain]
 
     def structured(
         self,
@@ -59,7 +63,7 @@ class FallbackProvider:
         # hop uses its own model from `self._chain`, never the caller's value.
         del model
         errors: list[str] = []
-        for provider, provider_model in self._chain:
+        for provider, provider_model, hop_timeout_s in self._chain:
             try:
                 return provider.structured(
                     system=system,
@@ -67,7 +71,7 @@ class FallbackProvider:
                     schema=schema,
                     model=provider_model,
                     max_tokens=max_tokens,
-                    timeout_s=timeout_s,
+                    timeout_s=hop_timeout_s if hop_timeout_s is not None else timeout_s,
                     effort=effort,
                 )
             except LLMUnavailable as exc:

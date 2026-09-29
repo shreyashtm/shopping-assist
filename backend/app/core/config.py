@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     # is required alongside it rather than reusing `interpret_model`.
     llm_fallback_provider: Literal["anthropic", "openrouter", "local"] | None = None
     fallback_interpret_model: str | None = None
+    # The fallback's own deadline. A free OpenRouter model takes 13-70s where
+    # Anthropic takes about 8, so sharing `interpret_timeout_s` would cut the
+    # backup off before it could answer. None means share it.
+    fallback_interpret_timeout_s: float | None = None
 
 
     # One model call per completed search, and this is it. The user-visible
