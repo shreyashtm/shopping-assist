@@ -172,6 +172,17 @@ def _own_request(query: str) -> str:
     return m.group(1).strip() if m else query
 
 
+_ESTABLISHED_LINE = re.compile(r"^Already established:.*$", re.M)
+
+
+def _shopper_words(query: str) -> str:
+    """What the shopper actually typed, across turns. A composed follow-up's
+    "Already established:" line is the app's own summary of earlier answers,
+    not the shopper's words -- live, it turned the model's "24-29 Oct" into
+    "Dates · 24–29 Oct 2026 (you)" on the follow-up."""
+    return _ESTABLISHED_LINE.sub("", query)
+
+
 def _carry_earlier_context(structured: StructuredQuery, query: str) -> StructuredQuery:
     m = _EARLIER_REQUEST.search(query)
     if not m:
@@ -666,7 +677,7 @@ def recommend_events(
         context_cache.set(_plan_key(_own_request(payload.query)), structured.context)
 
     structured, context_variables = apply_context_audit(
-        structured, payload.answers, today, request_text=payload.query
+        structured, payload.answers, today, request_text=_shopper_words(payload.query)
     )
     # A recipient is only missing when there is a gift. Live, "help me pack
     # for a trip" showed "Recipient · needed" because the model assumed gifts.

@@ -926,6 +926,13 @@ def test_dates_the_model_picked_are_labelled_as_its_guess(catalogue):
     exact = _response(catalogue, "trekking Hampta Pass from 24 October for 6 days", _trek_plan(),
                       skip_clarification=True)
     assert {v.name: v for v in exact.context_variables}["dates"].source == "user"
+    # A follow-up carries the app's own summary of earlier facts; that is not
+    # the shopper naming a day.
+    follow_up = (f"Earlier request: {HAMPTA}\nAlready established: Dates: 24–29 Oct 2026\n"
+                 "Follow-up: show me more shoes")
+    shown = {v.name: v for v in _response(catalogue, follow_up, _trek_plan(),
+                                          skip_clarification=True).context_variables}
+    assert shown["dates"].source == "inferred"
 
 
 def test_the_occasion_is_named(catalogue):
