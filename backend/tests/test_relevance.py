@@ -324,3 +324,25 @@ def test_hampta_request_shows_only_what_was_named(catalogue):
     _only(groups["Jackets"], JACKETS, "warm jacket")
     for item in groups["Jackets"] + groups["Footwear"]:
         assert item.product.attributes.gender in ("men", "unisex"), item.product.title
+
+
+def test_a_group_offers_a_real_choice_even_when_one_item_is_planned(catalogue):
+    """Live, with the model path: "women's jeans and a top for college" was
+    planned with max_items=1 per group ("a top" read as a quantity), and the
+    shopper got a single jeans and a single top to choose from."""
+    plan = _plan_for({"Jeans": ["Women's Apparel/Jeans"], "Top": ["Women's Apparel/Tops & T-Shirts"]},
+                     [], price_max=1500, gender="women")
+    original = plan.structured
+
+    def one_each(**kw):
+        payload = original(**kw)
+        for bucket in payload["buckets"]:
+            bucket["max_items"] = 1
+        return payload
+
+    plan.structured = one_each
+    response_cache.clear()
+    response = recommend(RecommendRequest(query="women's jeans and a top for college",
+                                          skip_clarification=True),
+                         catalogue, plan, today=date(2026, 9, 29))
+    assert all(len(g.items) >= 3 for g in response.groups), [(g.name, len(g.items)) for g in response.groups]

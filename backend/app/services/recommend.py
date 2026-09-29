@@ -74,6 +74,10 @@ logger = logging.getLogger(__name__)
 # ask more than 4" ceiling already used for questions within a single turn
 # (see `interpreter.SYSTEM` and `StructuredQuery._cap_questions`).
 MAX_CLARIFY_ANSWERS = 4
+# The model plans how many of a thing the shopper needs ("a top" -> 1), but
+# a group is a set of options to choose between. Live, max_items=1 left
+# "women's jeans and a top for college" with one pair of jeans and one top.
+MIN_OPTIONS_PER_GROUP = 3
 
 # A clarify response previews products alongside its questions. The risk this
 # guards against is real: "a gift for my sister" with nothing else stated gets
@@ -528,7 +532,10 @@ def recommend_events(
         if not candidates:
             continue
         groups.append(
-            _to_group(bucket.name, bucket.why_needed, candidates, bucket.max_items, structured)
+            _to_group(
+                bucket.name, bucket.why_needed, candidates,
+                max(bucket.max_items, MIN_OPTIONS_PER_GROUP), structured,
+            )
         )
 
     if not groups:
