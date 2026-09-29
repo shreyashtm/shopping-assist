@@ -111,6 +111,74 @@ def test_an_error_inside_a_200_response_is_reported_by_its_own_message():
                             max_tokens=10, timeout_s=None, effort=None)
 
 
+def test_only_endpoints_that_enforce_the_schema_are_used():
+    """Live: nemotron-3-ultra supports neither response_format nor structured
+    outputs, and returned unparseable JSON. require_parameters stops OpenRouter
+    routing to an endpoint that silently ignores the schema."""
+    captured = {}
+
+    def handler(request):
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "{}"}}]})
+
+    _provider_with_transport(handler).structured(system="s", user="u", schema={}, model="m")
+    assert captured["body"]["provider"] == {"require_parameters": True}
+
+
+def _chain_provider(handler, fallback_models) -> OpenRouterProvider:
+    provider = OpenRouterProvider(api_key="k", fallback_models=fallback_models)
+    provider._client = httpx.Client(transport=httpx.MockTransport(handler))
+    return provider
+
+
+def test_a_failing_model_hands_over_to_the_next_one():
+    """Live: free models failed with 429, an overloaded upstream, and empty
+    replies, each sending the search to keyword mode though another free
+    model was answering fine."""
+    tried = []
+
+    def handler(request):
+        model = json.loads(request.content)["model"]
+        tried.append(model)
+        if model == "rate-limited":
+            return httpx.Response(429, text="Too Many Requests")
+        if model == "overloaded":
+            return httpx.Response(200, json={"error": {"message": "overloaded", "code": 503}})
+        if model == "empty":
+            return httpx.Response(200, json={"choices": [{"message": {"content": ""}}]})
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"ok": 1}'}}]})
+
+    provider = _chain_provider(handler, ["overloaded", "empty", "works", "never-reached"])
+    result = provider.structured(system="s", user="u", schema={}, model="rate-limited", timeout_s=60)
+    assert result == {"ok": 1}
+    assert tried == ["rate-limited", "overloaded", "empty", "works"]
+
+
+def test_when_every_model_fails_the_error_names_each_one():
+    def handler(request):
+        return httpx.Response(429, text="Too Many Requests")
+
+    provider = _chain_provider(handler, ["b"])
+    with pytest.raises(LLMUnavailable, match="every model failed") as info:
+        provider.structured(system="s", user="u", schema={}, model="a", timeout_s=60)
+    assert "a call failed" in str(info.value) and "b call failed" in str(info.value)
+
+
+def test_a_later_model_is_not_started_without_time_to_answer():
+    """The chain shares one deadline: a hop with seconds left cannot finish,
+    and would only delay the keyword fallback."""
+    tried = []
+
+    def handler(request):
+        tried.append(json.loads(request.content)["model"])
+        return httpx.Response(429, text="Too Many Requests")
+
+    provider = _chain_provider(handler, ["b"])
+    with pytest.raises(LLMUnavailable, match="no time left"):
+        provider.structured(system="s", user="u", schema={}, model="a", timeout_s=1)
+    assert tried == ["a"]
+
+
 def test_the_timeout_is_a_total_deadline_not_a_gap_between_bytes():
     """Live: a search sat at "Reading your request" for over two minutes
     with a 75s timeout. OpenRouter keeps slow requests open by trickling

@@ -433,6 +433,10 @@ def _path_key(path: str) -> str:
     in the catalogue fits" while dozens of both were in budget.
     """
     text = unicodedata.normalize("NFKC", path).replace("’", "'").replace("‘", "'")
+    # A local model copies the prompt's taxonomy display instead of the path:
+    # "Gifting > Hampers (₹1299–₹5299)" or "Footwear: Sandals & Floaters".
+    text = re.sub(r"\s*\([^)]*\)\s*$", "", text)
+    text = re.sub(r"\s*(?:>|:)\s*", "/", text)
     text = re.sub(r"\s+and\s+", " & ", text.lower())
     text = re.sub(r"\s*/\s*", "/", text)
     return re.sub(r"\s+", " ", text).strip(" /")

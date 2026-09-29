@@ -290,7 +290,7 @@ def _amount(digits: str, thousands: str | None) -> int:
     return value * 1000 if thousands else value
 
 
-def _stated_filters(text: str) -> QueryFilters:
+def stated_filters(text: str) -> QueryFilters:
     """Gender and budget the request states in its own words."""
     men, women = bool(_MEN.search(text)), bool(_WOMEN.search(text))
     gender = "men" if men and not women else "women" if women and not men else None
@@ -490,7 +490,7 @@ def build_offline_query(query: str, answers: list[str]) -> StructuredQuery:
             )
         ]
 
-    stated = _stated_filters(text)
+    stated = stated_filters(text)
     # Ask only when the request is thin and nothing has been answered yet --
     # and never for what it already says.
     thin = len(text.split()) < 10 and not answers

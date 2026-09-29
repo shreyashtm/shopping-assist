@@ -437,6 +437,48 @@ def test_dates_the_shopper_never_gave_are_not_shown_as_theirs(catalogue):
     assert not any(v.name == "dates" for v in response.context_variables)
 
 
+def _invents_budget(price_min, price_max):
+    class _Model:
+        name = "i"
+        is_real = True
+
+        def structured(self, **_):
+            return {"intent_summary": "Warm socks.", "is_shopping_request": True,
+                    "buckets": [{"name": "Socks", "search_phrases": ["wool socks"], "why_needed": "x",
+                                 "role": "required", "catalogue_paths": ["Men's Apparel/Socks & Hosiery"]}],
+                    "filters": {"price_min": price_min, "price_max": price_max},
+                    "assumptions": []}
+    return _Model()
+
+
+def _budget(response):
+    return next((v.value, v.status) for v in response.context_variables if v.name == "budget")
+
+
+def test_a_budget_the_shopper_never_gave_is_not_applied(catalogue):
+    """Live: qwen3:8b gave a Hampta Pass trek that named no budget a
+    ₹2,000-40,000 window, and "a hamper under 5000" a ₹2,500 floor."""
+    model = _invents_budget(2000, 40000)
+    unstated = _response(catalogue, "wool socks for a trek in October", model, skip_clarification=True)
+    assert _budget(unstated) == (None, "needed")
+    ceiling = _response(catalogue, "wool socks under 40000", model, skip_clarification=True)
+    assert _budget(ceiling) == ("Under ₹40,000", "known")
+
+
+def test_the_shoppers_amount_wins_over_the_models(catalogue):
+    """Live, qwen3:8b: "suit and formal shoes ... budget 8000" came back as
+    ₹2,320-12,487, the suit shelf's price range copied from the prompt."""
+    response = _response(catalogue, "wool socks, budget 8000", _invents_budget(2320, 12487),
+                         skip_clarification=True)
+    assert _budget(response) == ("Under ₹8,000", "known")
+
+
+def test_a_budget_the_shopper_did_give_is_kept(catalogue):
+    response = _response(catalogue, "wool socks, budget 2000 to 40000", _invents_budget(2000, 40000),
+                         skip_clarification=True)
+    assert _budget(response) == ("₹2,000 – ₹40,000", "known")
+
+
 def test_a_stated_occasion_place_and_recipient_are_not_marked_needed(catalogue):
     cases = {
         "women's high heels and a blazer for an office party": "occasion",
@@ -447,3 +489,66 @@ def test_a_stated_occasion_place_and_recipient_are_not_marked_needed(catalogue):
     for query, slot in cases.items():
         needed = {v.name for v in _response(catalogue, query).context_variables if v.status == "needed"}
         assert slot not in needed, (query, needed)
+
+
+def _fills_in(location, gender):
+    class _Model:
+        name = "i"
+        is_real = True
+
+        def structured(self, **_):
+            return {"intent_summary": "Warm clothes.", "is_shopping_request": True,
+                    "buckets": [{"name": "Thermals", "search_phrases": ["thermal"], "why_needed": "x",
+                                 "role": "required", "catalogue_paths": ["Men's Apparel/Thermals & Base Layers"]}],
+                    "filters": {"gender": gender},
+                    "context": {"location": location,
+                                "climate_note": "Winter in India typically ranges from 5C to 15C."},
+                    "assumptions": []}
+    return _Model()
+
+
+def test_a_place_and_wearer_the_shopper_never_gave_are_not_shown(catalogue):
+    """Live, qwen3:8b: "Place · India (inferred)" with "add a date for India"
+    for "something warm for winter", "N/A (no location provided)" as a page
+    heading, and "For · unisex (you)" though nobody said so."""
+    for location in ("India", "N/A (no location provided)"):
+        response = _response(catalogue, "something warm for winter", _fills_in(location, "unisex"),
+                             skip_clarification=True)
+        shown = {v.name: (v.value, v.status) for v in response.context_variables}
+        assert response.context.location is None, location
+        assert response.context.climate_note is None, "a model-written climate with no place behind it"
+        assert shown.get("gender", (None, None))[0] != "unisex"
+
+
+def test_a_place_and_wearer_the_shopper_did_give_are_kept(catalogue):
+    response = _response(catalogue, "thermals for men for my Manali trip",
+                         _fills_in("Manali, Himachal Pradesh", "men"), skip_clarification=True)
+    assert response.context.location == "Manali, Himachal Pradesh"
+
+
+def test_a_trip_month_already_past_is_next_years(catalogue):
+    """Live, qwen3:8b on 29 Sep 2026: "Leh for 10 days in January" became
+    1-10 January 2026, and the page showed 3C nights for Leh in winter."""
+    class _PastDate:
+        name = "i"
+        is_real = True
+
+        def structured(self, **_):
+            return {"intent_summary": "Leh in January.", "is_shopping_request": True,
+                    "buckets": [{"name": "Thermals", "search_phrases": ["thermal"], "why_needed": "x",
+                                 "role": "required", "catalogue_paths": ["Men's Apparel/Thermals & Base Layers"]}],
+                    "context": {"location": "Leh, Ladakh", "start_date": "2026-01-01",
+                                "end_date": "2026-01-10", "duration_days": 10},
+                    "assumptions": []}
+
+    response = _response(catalogue, "Going to Leh for 10 days in January", _PastDate(), skip_clarification=True)
+    assert str(response.context.start_date) == "2027-01-01"
+    assert str(response.context.end_date) == "2027-01-10"
+
+
+def test_a_trip_length_is_not_a_budget(catalogue):
+    """Live: "10 days" counted as a stated price, so the model's invented
+    ₹1,000-20,000 was shown as the shopper's own budget."""
+    response = _response(catalogue, "wool socks for 10 days in January", _invents_budget(1000, 20000),
+                         skip_clarification=True)
+    assert _budget(response) == (None, "needed")

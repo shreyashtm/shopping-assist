@@ -49,9 +49,14 @@ from app.services.context import (
 )
 from app.services.context_slots import (
     apply_context_audit,
+    has_budget_answers,
     has_date_answers,
     is_specific_trip,
     stated_dates,
+    stated_money,
+    stated_place,
+    stated_wearer,
+    states_only_ceiling,
 )
 from app.services.explain import explain_pick
 from app.services.interpreter import (
@@ -60,6 +65,7 @@ from app.services.interpreter import (
     merge_answers,
     offline_interpret,
 )
+from app.services.offline import stated_filters
 from app.services.retrieval import (
     ScoredProduct,
     dedupe_across_buckets,
@@ -128,6 +134,16 @@ def _select_preview_buckets(buckets: list[Bucket], limit: int) -> list[Bucket]:
     role_rank = {"required": 0, "recommended": 1, "optional": 2}
     ranked = sorted(buckets, key=lambda b: (role_rank.get(b.role, 3), b.priority))
     return ranked[:limit]
+
+
+def _next_year(day: date, today: date) -> date:
+    """`day` moved forward whole years until it is no longer past."""
+    while day < today:
+        try:
+            day = day.replace(year=day.year + 1)
+        except ValueError:  # 29 February
+            day = day.replace(year=day.year + 1, day=28)
+    return day
 
 
 def _with_overrides(inferred: QueryFilters, override: QueryFilters | None) -> QueryFilters:
@@ -393,6 +409,55 @@ def recommend_events(
     if ctx.start_date and not stated_dates(payload.query) and not has_date_answers(payload.answers):
         structured = structured.model_copy(update={"context": ctx.model_copy(
             update={"start_date": None, "end_date": None, "duration_days": None})})
+
+    # A trip is planned ahead, so a date already past means the model picked
+    # the wrong year. Live, qwen3:8b read "Leh ... in January" on 29 Sep 2026
+    # as January 2026, and the page showed 3C nights for Leh in winter.
+    ctx = structured.context
+    if ctx.start_date and ctx.start_date < today:
+        start, end = _next_year(ctx.start_date, today), None
+        if ctx.end_date:
+            end = start + (ctx.end_date - ctx.start_date)
+        structured = structured.model_copy(update={"context": ctx.model_copy(
+            update={"start_date": start, "end_date": end})})
+
+    # Same for price. Live, qwen3:8b gave a Hampta Pass trek that named no
+    # budget a ₹2,000-40,000 window, and "a hamper under 5000" a ₹2,500
+    # floor, each silently hiding products the shopper could have bought.
+    # And "budget 8000" came back as ₹2,320-12,487, the suit shelf's price
+    # range copied from the prompt. When the words give an amount the parser
+    # can read, those words win over the model's numbers.
+    filters = structured.filters
+    if not has_budget_answers(payload.answers):
+        stated = stated_filters(payload.query.lower())
+        update: dict[str, int | None] = {}
+        if stated.price_min or stated.price_max:
+            update = {"price_min": stated.price_min, "price_max": stated.price_max}
+        elif not stated_money(payload.query):
+            update = {"price_min": None, "price_max": None}
+        elif filters.price_min and states_only_ceiling(payload.query):
+            update = {"price_min": None}
+        if update and any(getattr(filters, k) != v for k, v in update.items()):
+            structured = structured.model_copy(update={"filters": filters.model_copy(update=update)})
+
+    # And for place and wearer. Live, qwen3:8b set "India" for "something
+    # warm for winter" (then warned "add a date for India") and "N/A (no
+    # location provided)" for office wear, which became a page heading; and
+    # showed "For · unisex (you)" when the shopper had said nothing of the kind.
+    ctx = structured.context
+    if ctx.location and not stated_place(ctx.location, payload.query):
+        structured = structured.model_copy(update={"context": ctx.model_copy(update={
+            "location": None, "location_lat": None, "location_lon": None,
+            "elevation_estimate_m": None})})
+    # With no place there is no weather lookup, so any climate note is the
+    # model's own: "No specific climate information provided.", or "Winter in
+    # India typically ranges from 5C to 15C" -- a number no source backs.
+    ctx = structured.context
+    if not ctx.location and ctx.climate_note:
+        structured = structured.model_copy(update={"context": ctx.model_copy(update={"climate_note": None})})
+    filters = structured.filters
+    if (filters.gender or "").lower() in {"unisex", "both"} and not stated_wearer(payload.query):
+        structured = structured.model_copy(update={"filters": filters.model_copy(update={"gender": None})})
 
     if payload.answers:
         structured = merge_answers(structured, payload.answers)

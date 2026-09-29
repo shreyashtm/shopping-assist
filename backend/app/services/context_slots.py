@@ -118,6 +118,66 @@ def stated_dates(text: str) -> bool:
     return bool(_STATED_DATES.search(text.lower()))
 
 
+_STATED_MONEY = re.compile(
+    r"₹|\brs\.?\b|\binr\b|rupee|budget|\bcheap|affordable|premium|luxur|expensive"
+    r"|thousand|lakh|grand\b|\d\s*k\b"
+)
+# A number is a price unless it counts time or is a year: "10 days in
+# January" states no budget, and the model's ₹1,000-20,000 survived on it.
+_NUMBER = re.compile(r"\b(\d[\d,]*)\b(?!\s*(?:-|–|to)?\s*\d*\s*(?:days?|nights?|weeks?|months?|years?|yrs?"
+                     r"|hours?|hrs?|am|pm|th|st|nd|rd|people|persons?|kids?|km|m\b|metres?|meters?))")
+_FLOOR_WORDS = re.compile(
+    r"\b(above|over|from|between|at least|min(imum)?|starting)\b"
+    r"|\d\s*k?\s*(-|–|to|and)\s*(rs\.?|₹)?\s*\d"
+)
+_CEILING_WORDS = re.compile(r"\b(under|below|less than|within|up ?to|max(imum)?)\b")
+
+
+def stated_money(text: str) -> bool:
+    """Whether the shopper's own words say anything about price."""
+    lowered = text.lower()
+    if _STATED_MONEY.search(lowered):
+        return True
+    for m in _NUMBER.finditer(lowered):
+        value = int(m.group(1).replace(",", ""))
+        if value >= 100 and not 1900 <= value <= 2100:
+            return True
+    return False
+
+
+def states_only_ceiling(text: str) -> bool:
+    """"under 5000" sets a ceiling and nothing else; a floor is an invention."""
+    lowered = text.lower()
+    if not _CEILING_WORDS.search(lowered):
+        return False
+    return not _FLOOR_WORDS.search(_CEILING_WORDS.sub(" ", lowered))
+
+
+_NOT_A_PLACE = {"not", "none", "unknown", "location", "provided", "specified", "given", "n/a"}
+
+
+def stated_place(location: str, text: str) -> bool:
+    """Whether the shopper's words name the place the model resolved.
+
+    The model may expand a place ("Manali" to "Manali, Himachal Pradesh"), so
+    only the first part has to appear. A place none of whose words appear --
+    "India" for "something warm for winter", or "N/A (no location provided)"
+    -- is the model's filler, not the shopper's trip.
+    """
+    head = location.split(",")[0].lower()
+    words = [w for w in re.findall(r"[a-z/]{3,}", head) if w not in _NOT_A_PLACE]
+    lowered = text.lower()
+    return any(re.search(rf"\b{re.escape(w)}", lowered) for w in words)
+
+
+def stated_wearer(text: str) -> bool:
+    return bool(_STATED_WEARER.search(text.lower()))
+
+
+def has_budget_answers(answers: list[str]) -> bool:
+    return any("price_min:" in a or "price_max:" in a for a in answers)
+
+
 def has_date_answers(answers: list[str]) -> bool:
     return any("start_date:" in a or "end_date:" in a for a in answers)
 

@@ -30,7 +30,24 @@ from app.adapters.llm.base import LLMUnavailable, post_json_with_deadline
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BASE_URL = "http://localhost:11434/v1/chat/completions"
+DEFAULT_BASE_URL = "http://localhost:11434/api/chat"
+
+# Ollama loads a model with a 4,096-token window unless asked for more. The
+# interpretation prompt (instructions, live taxonomy, schema) is about 3,000
+# tokens before the answer, so the default silently cut the prompt: qwen3:8b
+# planned thermals for a Goa beach trip and invented shelf names.
+NUM_CTX = 12288
+
+
+def _native_url(base_url: str) -> str:
+    """Ollama's native chat endpoint for a configured base URL.
+
+    Earlier configs pointed at the OpenAI-compatible /v1/chat/completions,
+    which cannot set the context window or turn thinking off.
+    """
+    if "/v1/" in base_url:
+        return base_url.split("/v1/")[0] + "/api/chat"
+    return base_url
 
 
 class LocalProvider:
@@ -43,7 +60,7 @@ class LocalProvider:
         # `model` argument to `structured()` on every call (INTERPRET_MODEL),
         # same as Anthropic and OpenRouter -- Ollama has no separate
         # per-client model selection to configure ahead of time.
-        self._base_url = base_url
+        self._base_url = _native_url(base_url)
         self._client = httpx.Client(timeout=timeout_s)
 
     def structured(
@@ -59,24 +76,21 @@ class LocalProvider:
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": model,
-            "max_tokens": max_tokens,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "structured_query",
-                    "schema": schema,
-                    "strict": True,
-                },
-            },
+            # Ollama constrains decoding to the schema, so the reply always
+            # parses; the shape is still validated by the interpreter.
+            "format": schema,
+            "stream": False,
+            # Reasoning models (qwen3) otherwise think first: 40-55s a search
+            # instead of well under half that, for a slot-filling task.
+            "think": False,
+            "options": {"num_ctx": NUM_CTX, "num_predict": max_tokens},
         }
-        # `effort` has no Ollama/local-model equivalent -- there is no
-        # request field for it, so it is silently ignored rather than sent
-        # as a parameter no local model understands.
-
+        # `effort` has no Ollama equivalent beyond `think`, which is always
+        # off here, so it is ignored rather than sent.
 
         try:
             body = post_json_with_deadline(
@@ -87,9 +101,11 @@ class LocalProvider:
                 f"{model} call failed (is `ollama serve` running?): {exc}"
             ) from exc
 
+        if isinstance(body, dict) and body.get("error"):
+            raise LLMUnavailable(f"{model} error: {body['error']}")
         try:
-            text = body["choices"][0]["message"]["content"]
-        except (KeyError, IndexError) as exc:
+            text = body["message"]["content"]
+        except (KeyError, TypeError) as exc:
             raise LLMUnavailable(f"{model} returned an unexpected response shape") from exc
         if not text:
             raise LLMUnavailable(f"{model} returned no text content")

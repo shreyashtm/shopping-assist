@@ -38,8 +38,8 @@ class Settings(BaseSettings):
     llm_provider: Literal["anthropic", "openrouter", "local"] = "anthropic"
     anthropic_api_key: str | None = None
     openrouter_api_key: str | None = None
-    # Ollama's OpenAI-compatible endpoint. No key needed -- it's local.
-    local_llm_base_url: str = "http://localhost:11434/v1/chat/completions"
+    # Ollama's native chat endpoint. No key needed -- it's local.
+    local_llm_base_url: str = "http://localhost:11434/api/chat"
 
     # Optional second provider, tried when `llm_provider` is unconfigured or a
     # live call fails (rate limit, transport error, etc.) -- see
@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     # Interpretation is structured extraction -- fill slots, decide what is
     # missing, generate multiple-choice questions -- which Haiku handles well.
     interpret_model: str = "claude-haiku-4-5"
+
+    # OpenRouter only: more models to try, in order, when `interpret_model`
+    # fails (rate limit, overload, empty or broken reply). Free models fail
+    # often and independently, so a short chain is what keeps searches on
+    # the AI path. Comma-separated in the environment.
+    interpret_fallback_models: str = ""
 
     # Generous: a slow structured extraction that times out degrades the entire
     # search to keyword matching, which is a far worse outcome than waiting.

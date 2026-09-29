@@ -347,3 +347,14 @@ def test_an_unknown_path_is_left_for_retrieval_to_report():
     bucket = {**_BASE_PAYLOAD["buckets"][0], "catalogue_paths": ["Snowshoes/Carbon"]}
     structured = interpret(_FixedProvider({**_BASE_PAYLOAD, "buckets": [bucket]}), "m", "x", date(2026, 9, 29))
     assert structured.buckets[0].catalogue_paths == ["Snowshoes/Carbon"]
+
+
+def test_a_shelf_written_the_way_the_prompt_displays_it_still_maps():
+    """Live, qwen3:8b copied the taxonomy display instead of the path:
+    "Gifting > Hampers (₹1299–₹5299)" and "Footwear: Sandals & Floaters"
+    matched no shelf, so those needs found nothing."""
+    from app.services.interpreter import _canonical_path
+
+    assert _canonical_path("Gifting > Hampers (₹1299–₹5299)") == "Gifting/Hampers"
+    assert _canonical_path("Footwear: Sandals & Floaters") == "Footwear/Sandals & Floaters"
+    assert _canonical_path("Men's Apparel/Jackets & Coats") == "Men's Apparel/Jackets & Coats"

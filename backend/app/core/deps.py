@@ -107,7 +107,12 @@ def _build_named_provider(name: str, settings) -> LLMProvider | None:
             return None
         from app.adapters.llm.openrouter_provider import OpenRouterProvider
 
-        return OpenRouterProvider(settings.openrouter_api_key, settings.llm_timeout_s)
+        fallback_models = [
+            m.strip() for m in settings.interpret_fallback_models.split(",") if m.strip()
+        ]
+        return OpenRouterProvider(
+            settings.openrouter_api_key, settings.llm_timeout_s, fallback_models=fallback_models
+        )
 
     if not settings.anthropic_api_key:
         return None
