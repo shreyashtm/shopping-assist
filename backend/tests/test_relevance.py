@@ -182,3 +182,54 @@ def test_casual_garments_are_never_tagged_formal(catalogue):
     wrong = [(p.subcategory, p.title[:50]) for p in catalogue.products
              if p.subcategory in casual_types and p.attributes.formality == "formal"]
     assert not wrong, wrong
+
+
+def test_a_budget_range_shows_in_range_picks_when_good_ones_exist(catalogue):
+    """Live: Rs 1,500-3,000 running shoes showed four shoes under Rs 1,100
+    while two verified in-range running shoes were near-ties."""
+    groups = _cards(catalogue, "running shoes for the gym and morning jogs",
+                    ["gender:men", "price_min:1500,price_max:3000"])
+    shoes = groups["Footwear"]
+    in_range = [i for i in shoes if 1500 <= i.product.price_inr <= 3000]
+    assert in_range, [(i.product.title[:40], i.product.price_inr) for i in shoes]
+    assert all(i.product.subcategory == "Sports Shoes" for i in in_range), "boots must not be promoted"
+
+
+# Live: "wool socks for winter" showed jackets and running shoes, because
+# "socks" and ~25 other everyday product words had no keyword route and fell
+# through to generic suggestions.
+@pytest.mark.parametrize("query, allowed", [
+    ("wool socks for winter", {"Socks & Hosiery"}),
+    ("thermals for a cold trip", {"Thermals & Base Layers"}),
+    ("a warm sweater or hoodie", {"Sweaters & Fleece"}),
+    ("a summer dress", {"Dresses"}),
+    ("a pleated skirt", {"Skirts"}),
+    ("ballerina flats for office", {"Flats"}),
+    ("comfortable slippers for home", {"Sandals & Floaters"}),
+    ("a perfume for him", {"Fragrance"}),
+    ("winter gloves", {"Outdoor Accessories"}),
+    ("cotton shorts for summer", {"Shorts"}),
+    ("a navy blazer for work", {"Suits & Blazers", "Blazers"}),
+    ("a tracksuit for the gym", {"Activewear"}),
+    ("a cabin suitcase for travel", {"Luggage & Trolleys", "Duffels"}),
+    ("a suitcase for my trip", {"Luggage & Trolleys", "Duffels"}),
+    ("I need a suit for my interview", {"Suits & Blazers", "Blazers"}),
+    ("formal dress shirt", {"Formal Shirts", "Casual Shirts"}),
+])
+def test_everyday_product_words_route_to_their_shelf(catalogue, query, allowed):
+    groups = _cards(catalogue, query)
+    assert "Suggestions" not in groups, f"{query!r} fell through to generic suggestions"
+    for name, items in groups.items():
+        _only(items, allowed, f"{query!r} / {name}")
+
+
+def test_new_routes_do_not_fire_on_lookalike_words():
+    from app.services.offline import build_offline_query
+    for query, unwanted in (("what is the capital of France", "Accessories"),
+                            ("home decor for my new flat", "Flats"),
+                            ("a fleece lined winter jacket", "Sweaters & Fleece"),
+                            ("thermal socks for trekking", "Thermals"),
+                            ("something dressy for a party", "Dresses"),
+                            ("a suitcase for my trip", "Suits & Blazers")):
+        names = [b.name for b in build_offline_query(query, []).buckets]
+        assert unwanted not in names, (query, names)

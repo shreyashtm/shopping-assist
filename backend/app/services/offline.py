@@ -42,7 +42,7 @@ _ROUTES: list[tuple[tuple[str, ...], str, list[str], str]] = [
         "trekking gear for cold weather",
     ),
     (
-        ("wedding", "sherwani", "saree", "lehenga", "kurta", "ethnic", "festive"),
+        ("wedding", "sherwani", "saree", "lehenga", "kurta", "kurti", "ethnic", "festive"),
         "Traditional Wear",
         [
             "Ethnic Wear/Sherwanis", "Ethnic Wear/Kurta Sets",
@@ -77,7 +77,7 @@ _ROUTES: list[tuple[tuple[str, ...], str, list[str], str]] = [
         "t-shirt",
     ),
     (
-        ("shirt",),
+        ("shirt", "dress shirt"),
         "Shirts",
         ["Men's Apparel/Casual Shirts", "Men's Apparel/Formal Shirts"],
         "shirt",
@@ -89,13 +89,13 @@ _ROUTES: list[tuple[tuple[str, ...], str, list[str], str]] = [
         "jeans",
     ),
     (
-        ("trouser", "pant", "chino"),
+        ("trouser", "pant", "chino", "dress pants"),
         "Trousers",
         ["Men's Apparel/Trousers & Chinos", "Women's Apparel/Trousers"],
         "trousers",
     ),
     (
-        ("shoe", "sneaker", "footwear", "boot", "sandal"),
+        ("shoe", "sneaker", "footwear", "boot"),
         "Footwear",
         [
             "Footwear/Sports Shoes", "Footwear/Casual Sneakers",
@@ -104,6 +104,50 @@ _ROUTES: list[tuple[tuple[str, ...], str, list[str], str]] = [
         "shoes",
     ),
     (("watch",), "Watches", ["Watches & Jewellery/Watches"], "wrist watch"),
+    # Everyday product words that used to fall through to generic suggestions
+    # ("wool socks for winter" showed jackets and running shoes). Keywords are
+    # chosen so word-start matching cannot misfire: no bare "cap" (capital),
+    # "flat" (a new flat), "fleece" or "thermal" (usually describing another
+    # garment), and "dress" is claimed by "dress shirt"/"dress pants" first.
+    (("sock",), "Socks", ["Men's Apparel/Socks & Hosiery", "Women's Apparel/Socks & Hosiery"], "warm socks"),
+    (
+        ("thermals", "thermal wear", "thermal innerwear", "innerwear", "base layer"),
+        "Thermals & Base Layers", ["Men's Apparel/Thermals & Base Layers"], "thermal base layer",
+    ),
+    (
+        ("sweater", "hoodie", "sweatshirt", "pullover", "cardigan"),
+        "Sweaters & Hoodies",
+        ["Men's Apparel/Sweaters & Fleece", "Women's Apparel/Sweaters & Fleece"], "warm sweater",
+    ),
+    (("dress", "gown"), "Dresses", ["Women's Apparel/Dresses"], "dress"),
+    (("skirt",), "Skirts", ["Women's Apparel/Skirts"], "skirt"),
+    (("heels", "stilettos"), "Heels", ["Footwear/Heels"], "heels"),
+    (("flats", "ballerina", "ballet flat"), "Flats", ["Footwear/Flats"], "flats"),
+    (
+        ("sandal", "slipper", "floater", "flip flop", "flip-flop", "chappal"),
+        "Sandals & Slippers", ["Footwear/Sandals & Floaters"], "sandals",
+    ),
+    (
+        ("perfume", "deodorant", "fragrance", "cologne", "attar"),
+        "Fragrance", ["Beauty & Personal Care/Fragrance"], "perfume",
+    ),
+    (("glove",), "Gloves", ["Outdoor & Camping Gear/Outdoor Accessories"], "warm gloves"),
+    (("shorts",), "Shorts", ["Men's Apparel/Shorts"], "shorts"),
+    (
+        # Phrases, not bare "suit": that is a verb as often as a garment, and
+        # "a suit" matched the start of "a suitcase".
+        ("blazer", "tuxedo", "waistcoat", "suit for", "suits for", "business suit",
+         "three piece suit", "suit and tie"),
+        "Suits & Blazers", ["Men's Apparel/Suits & Blazers", "Women's Apparel/Blazers"], "blazer",
+    ),
+    (
+        ("tracksuit", "track pants", "trackpants", "jogger", "gym wear", "sportswear"),
+        "Activewear", ["Sports & Fitness/Activewear"], "activewear",
+    ),
+    (
+        ("suitcase", "trolley", "luggage", "duffel", "duffle"),
+        "Luggage", ["Bags & Luggage/Luggage & Trolleys", "Bags & Luggage/Duffels"], "suitcase",
+    ),
     # Its own route rather than part of Bags: Bags searches with the phrase
     # "backpack", which ranked backpacks above every wallet for "a wallet".
     (("wallet",), "Wallets", ["Bags & Luggage/Wallets"], "leather wallet"),
@@ -132,13 +176,13 @@ _ROUTES: list[tuple[tuple[str, ...], str, list[str], str]] = [
         "skincare products",
     ),
     (
-        ("bag", "backpack", "luggage", "handbag"),
+        ("bag", "backpack", "handbag"),
         "Bags",
         ["Bags & Luggage/Backpacks", "Bags & Luggage/Handbags & Clutches"],
         "backpack",
     ),
     (
-        ("headphone", "smartwatch", "earbud", "electronic", "fitness band"),
+        ("headphone", "smartwatch", "earbud", "earphone", "electronic", "fitness band"),
         "Electronics",
         [
             "Electronics & Accessories/Wearables",
@@ -182,7 +226,7 @@ _GENERIC_QUESTIONS = [
 
 _MODIFIER_PHRASES = (
     "top rated", "top-rated", "top quality", "top-quality", "top brand", "top notch",
-    "top-notch", "top selling", "top-selling",
+    "top-notch", "top selling", "top-selling", "dressy", "dress code", "dressed",
 )
 
 
