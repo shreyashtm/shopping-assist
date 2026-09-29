@@ -93,3 +93,19 @@ def test_unparseable_json_content_becomes_llm_unavailable():
     provider = _provider_with_transport(handler)
     with pytest.raises(LLMUnavailable):
         provider.structured(system="s", user="u", schema={}, model="m")
+
+
+def test_an_error_inside_a_200_response_is_reported_by_its_own_message():
+    """Live: OpenRouter answered HTTP 200 with {"error": {"message": "Upstream
+    error from Nvidia: Service temporarily overloaded", "code": 503}} and the
+    log said only "returned an unexpected response shape"."""
+    from app.adapters.llm.base import LLMUnavailable
+
+    def handler(request):
+        return httpx.Response(200, json={"id": "gen-1", "error": {
+            "message": "Upstream error from Nvidia: Service temporarily overloaded", "code": 503}})
+
+    provider = _provider_with_transport(handler)
+    with pytest.raises(LLMUnavailable, match="Service temporarily overloaded"):
+        provider.structured(system="s", user="u", schema={"type": "object"}, model="m",
+                            max_tokens=10, timeout_s=None, effort=None)

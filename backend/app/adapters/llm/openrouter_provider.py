@@ -87,6 +87,13 @@ class OpenRouterProvider:
             raise LLMUnavailable(f"{model} call failed: {exc}") from exc
 
         body = response.json()
+        # OpenRouter can answer HTTP 200 with the upstream failure in the body
+        # ("Service temporarily overloaded", code 503). Say so, rather than
+        # "unexpected response shape", which hid the cause in the logs.
+        if isinstance(body, dict) and body.get("error"):
+            error = body["error"]
+            message = error.get("message", error) if isinstance(error, dict) else error
+            raise LLMUnavailable(f"{model} provider error: {message}")
         try:
             text = body["choices"][0]["message"]["content"]
         except (KeyError, IndexError) as exc:
