@@ -1042,3 +1042,46 @@ def test_ambiguous_words_do_not_imply_a_tag():
         r.startswith("made for")
         for r in score_product(runner, 0.5, _bucket("a t-shirt to run errands in"), MILD).reasons
     )
+
+
+# --- a stated budget decides near-ties -------------------------------------
+#
+# Live: running shoes with "Rs 1,500 - 3,000" chosen showed four shoes under
+# Rs 1,100, while two in-range running shoes scored 0.97 of the best. The
+# floor is a preference, but a preference that never wins a near-tie is not
+# one the shopper can see.
+
+
+def _budget_catalogue(prices_and_vectors):
+    products = [make_product(f"p{i}", price_inr=price, subcategory="Jackets & Coats")
+                for i, (price, _) in enumerate(prices_and_vectors)]
+    vectors = np.array([v for _, v in prices_and_vectors], dtype=np.float32)
+    vectors /= np.linalg.norm(vectors, axis=1, keepdims=True)
+    return Catalogue(products, vectors)
+
+
+def _search(catalogue, filters):
+    query = np.array([[1.0] + [0.0] * 3], dtype=np.float32)
+    return search_bucket(catalogue, query, TREK_BUCKET, filters, MILD, limit=10)
+
+
+def test_an_in_range_near_tie_moves_ahead_of_cheaper_items():
+    # cosine 1.0 and 0.99 below the floor; 0.955 in range -- the live gap,
+    # which the plain in-budget boost does not close
+    cat = _budget_catalogue([(900, [1, 0, 0, 0]), (950, [1, 0.14, 0, 0]), (2500, [1, 0.31, 0, 0])])
+    ranked = _search(cat, QueryFilters(price_min=1500, price_max=3000))
+    assert ranked[0].product.price_inr == 2500
+    scores = [s.score for s in ranked]
+    assert scores == sorted(scores, reverse=True), "the lift must be expressed in the score"
+
+
+def test_a_clearly_less_relevant_in_range_item_is_not_promoted():
+    cat = _budget_catalogue([(900, [1, 0, 0, 0]), (2500, [1, 0.6, 0, 0])])  # cosine ~0.86
+    ranked = _search(cat, QueryFilters(price_min=1500, price_max=3000))
+    assert ranked[0].product.price_inr == 900
+
+
+def test_without_a_floor_nothing_is_reordered():
+    cat = _budget_catalogue([(900, [1, 0, 0, 0]), (2500, [1, 0.25, 0, 0])])
+    ranked = _search(cat, QueryFilters(price_max=3000))
+    assert ranked[0].product.price_inr == 900

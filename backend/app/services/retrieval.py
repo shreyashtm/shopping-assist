@@ -62,6 +62,12 @@ BOOST_POPULARITY = 0.05
 # is a mild negative signal about fit ("is this the quality I asked for?"),
 # never a disqualifying one.
 BOOST_IN_BUDGET = 0.10
+# Scores this close to the best are treated as a tie, which the stated budget
+# then decides (see _prefer_stated_budget). 5% is about the spread between
+# near-identical products in one search -- four HRX and ASIAN running shoes
+# scored 0.691 to 0.695 -- while a different product type sits further away:
+# in-range boots in that search scored 0.94 of the best.
+BUDGET_TIE_WINDOW = 0.05
 
 # Semantic floors, relaxed deliberately once category gating landed.
 #
@@ -782,7 +788,41 @@ def search_bucket(
 
     scored = [s for s in scored if s.semantic >= MIN_SEMANTIC]
     scored.sort(key=lambda s: s.score, reverse=True)
-    return scored[:limit]
+    return _prefer_stated_budget(scored, bucket_filters)[:limit]
+
+
+def _prefer_stated_budget(scored: list[ScoredProduct], filters: QueryFilters) -> list[ScoredProduct]:
+    """In a near-tie on relevance, the shopper's stated budget wins.
+
+    The price floor is a preference, never a filter (see passes_filters), and
+    BOOST_IN_BUDGET is deliberately small so a far better cheaper match still
+    leads. But it was too small to ever decide a near-tie: live, running shoes
+    with "Rs 1,500 - 3,000" chosen showed four pairs under Rs 1,100 while two
+    in-range running shoes scored 0.97 of the best. A budget that never wins a
+    tie is not one the shopper can see.
+
+    Products inside the stated range whose score is within
+    BUDGET_TIE_WINDOW of the best are lifted just above the best cheaper one,
+    keeping their order. The lift is written into the score so ranking,
+    match_score and cross-bucket dedupe all agree. Clearly less relevant
+    in-range products -- boots at 0.94 in the same search -- are not moved.
+    """
+    if not filters.price_min or not scored or scored[0].score <= 0:
+        return scored
+
+    def in_range(s: ScoredProduct) -> bool:
+        return filters.price_min <= s.product.price_inr <= (filters.price_max or s.product.price_inr)
+
+    best = scored[0].score
+    if in_range(scored[0]):
+        return scored
+    tied = [s for s in scored if in_range(s) and s.score >= best * (1 - BUDGET_TIE_WINDOW)]
+    if not tied:
+        return scored
+    for rank, item in enumerate(tied):
+        # Just above the best cheaper match, in their own order.
+        item.score = best + (len(tied) - rank) * 1e-4
+    return sorted(scored, key=lambda s: s.score, reverse=True)
 
 
 def use_case_conflict(product: Product, phrase_tokens: set[str]) -> str | None:
