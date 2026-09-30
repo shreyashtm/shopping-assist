@@ -47,7 +47,7 @@ class AnthropicProvider:
                     {"format": {"type": "json_schema", "schema": schema}, "effort": effort}
                     if effort
                     else {"format": {"type": "json_schema", "schema": schema}}
-                ),
+                ), # pyright: ignore[reportArgumentType]
             )
         except self._errors.APIError as exc:
             raise LLMUnavailable(f"{model} call failed: {exc}") from exc
