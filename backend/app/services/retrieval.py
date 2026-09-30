@@ -40,13 +40,15 @@ A jacket rated to -10C still beats one rated to 5C for a sub-zero trek, because
 they sit next to each other semantically and `temp_rating_c` breaks the tie.
 """
 
+import re
+
 import numpy as np
 
 from app.core.formatting import indian_grouping
 from app.schemas.product import Product
 from app.schemas.query import Bucket, ContextConstraints, QueryFilters, ResolvedContext
-from app.services.catalogue import Catalogue
 from app.services import suitability
+from app.services.catalogue import Catalogue
 from app.services.taxonomy import ALL_PATHS, PRODUCT_TAXONOMY
 
 # Boost weights, applied multiplicatively against the semantic score. Their sum
@@ -291,6 +293,28 @@ def _relevant_categories(filters: QueryFilters, bucket: Bucket) -> list[str]:
     return relevant
 
 
+_TITLE_FOR_MEN = re.compile(
+    r"\b(men|mens|men's|man|male|gents|for him|bolo|necktie|cufflinks?|tie clip)\b", re.I
+)
+_TITLE_FOR_WOMEN = re.compile(
+    r"\b(women|womens|women's|woman|ladies|female|girls?|for her)\b", re.I
+)
+
+
+def _title_names_other_gender(title: str, wanted: str) -> bool:
+    """Whether a product's own title is made for the other gender.
+
+    The "unisex" tag is enrichment output and is wrong often enough to matter:
+    "Bolo Tie for Men Western Cowboy Tie Necklace" is tagged unisex, so a
+    women's search offered it. A title that says who it is for outranks the tag
+    -- unless it names both.
+    """
+    men, women = bool(_TITLE_FOR_MEN.search(title)), bool(_TITLE_FOR_WOMEN.search(title))
+    if men == women:
+        return False
+    return men if wanted == "women" else women
+
+
 def passes_filters(product: Product, filters: QueryFilters) -> bool:
     """Hard constraints. A product failing any of these is never a candidate.
 
@@ -331,6 +355,8 @@ def passes_filters(product: Product, filters: QueryFilters) -> bool:
         if product.attributes.gender == "kids":
             return False
     elif filters.gender and product.attributes.gender not in (filters.gender, "unisex"):
+        return False
+    elif filters.gender in ("men", "women") and _title_names_other_gender(product.title, filters.gender):
         return False
     if filters.categories:
         product_path = f"{product.category}/{product.subcategory}"

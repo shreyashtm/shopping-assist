@@ -97,3 +97,44 @@ def test_a_single_required_bucket_is_enough_to_justify_a_preview():
     selected = _select_preview_buckets(buckets, MAX_BUCKETS_FOR_PREVIEW)
 
     assert "Core need" in [b.name for b in selected]
+
+
+# --- shelf repair, named items, nearest-shelf gap note ----------------------
+
+def test_shelf_filed_under_wrong_category_is_moved():
+    from app.services.interpreter import _canonical_path
+
+    assert _canonical_path("Women's Apparel/Sarees") == "Ethnic Wear/Sarees"
+    # Ambiguous names (held by two categories) are left alone.
+    assert _canonical_path("Nowhere/Sweaters & Fleece") == "Nowhere/Sweaters & Fleece"
+
+
+def test_named_item_missing_from_plan_gets_a_group():
+    from app.schemas.query import Bucket
+    from app.services.recommend import _add_named_items
+
+    saree = Bucket(name="Saree", why_needed="x", catalogue_paths=["Ethnic Wear/Sarees"])
+    plan = _add_named_items([saree], "a saree and jewellery for my sister's wedding")
+    assert [b.name for b in plan] == ["Saree", "Jewellery"]
+    assert plan[1].role == "required"
+    # Already covered, or not named: nothing is added.
+    assert _add_named_items(plan, "a saree and jewellery") == plan
+    assert _add_named_items([saree], "a saree for a wedding") == [saree]
+
+
+def test_heels_gap_names_nearest_shelves_without_filling_it():
+    from app.schemas.query import Bucket
+    from app.services.recommend import _no_stock_reason
+
+    assert "Flats" in _no_stock_reason(Bucket(name="Heels", why_needed="x"))
+    assert _no_stock_reason(Bucket(name="Gizmo", why_needed="x")).endswith("yet")
+
+
+def test_implied_gender_from_relation_and_item():
+    from app.services.context_slots import implied_gender
+
+    assert implied_gender("a saree and jewellery for my sister's wedding, budget 8000") == "women"
+    assert implied_gender("something nice for my girlfriend") == "women"
+    assert implied_gender("a watch for my dad") == "men"
+    assert implied_gender("gift for my mom and dad") is None
+    assert implied_gender("a trekking jacket") is None

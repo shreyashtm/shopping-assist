@@ -11,13 +11,19 @@ import numpy as np
 import pytest
 
 from app.schemas.product import Product
-from app.schemas.query import Bucket, ClimateContext, ContextConstraints, QueryFilters, ResolvedContext
+from app.schemas.query import (
+    Bucket,
+    ClimateContext,
+    ContextConstraints,
+    QueryFilters,
+    ResolvedContext,
+)
 from app.services.catalogue import Catalogue, embedding_text
 from app.services.retrieval import (
     dedupe_across_buckets,
     implied_seasons,
-    passes_occasion_context,
     passes_filters,
+    passes_occasion_context,
     sanitize_categories,
     score_product,
     search_bucket,
@@ -1109,3 +1115,30 @@ def test_a_real_wedding_still_uses_the_wedding_rule():
     festive = make_product("f", category="Ethnic Wear", subcategory="Sherwanis",
                            attributes={"occasion": ["festive"]})
     assert passes_occasion_context(festive, bucket)
+
+
+def test_unisex_tag_does_not_beat_a_title_made_for_the_other_gender():
+    from app.schemas.query import QueryFilters
+    from app.services.retrieval import passes_filters
+
+    def item(pid, title):
+        product = make_product(pid, title=title)
+        product.attributes.gender = "unisex"
+        return product
+
+    bolo = item("b", "Bolo Tie for Men Western Cowboy Tie Necklace")
+    ring = item("r", "Gemstone Ring Gold")
+    assert not passes_filters(bolo, QueryFilters(gender="women"))
+    assert passes_filters(bolo, QueryFilters(gender="men"))
+    assert passes_filters(ring, QueryFilters(gender="women"))
+
+
+def test_bare_men_in_title_and_menswear_only_accessories_are_the_other_gender():
+    from app.schemas.query import QueryFilters
+    from app.services.retrieval import passes_filters
+
+    for pid, title in [("a", "Western Cowboy Bolo Tie Men Leather Necktie Rope"),
+                       ("b", "Gemstone Bolo Tie Faux Leather Natural Stone Gold")]:
+        product = make_product(pid, title=title)
+        product.attributes.gender = "unisex"
+        assert not passes_filters(product, QueryFilters(gender="women"))

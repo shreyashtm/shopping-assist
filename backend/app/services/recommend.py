@@ -55,6 +55,7 @@ from app.services.context_slots import (
     apply_context_audit,
     has_budget_answers,
     has_date_answers,
+    implied_gender,
     is_specific_trip,
     names_worn_item,
     shelf_called_for,
@@ -152,6 +153,57 @@ FAMILY_GIFTS = Bucket(
     role="recommended",
     catalogue_paths=["Gifting/Hampers", "Gifting/Gourmet & Dry Fruits", "Gifting/Home Fragrance"],
 )
+
+# Items a shopper can name that have one obvious shelf. Live, "a saree and
+# jewellery for my sister's wedding" got a plan with no jewellery group at
+# all, though the catalogue holds 26 pieces: a named item the plan leaves
+# out is the shopper's ask quietly dropped.
+_NAMED_SHELVES: tuple[tuple[re.Pattern[str], str, list[str], str], ...] = (
+    (re.compile(r"\b(jewell?ery|necklaces?|earrings?|bracelets?|bangles?)\b", re.I),
+     "Jewellery", ["jewellery", "necklace", "earrings", "bracelet"],
+     "Watches & Jewellery/Jewellery"),
+    (re.compile(r"\bwatch(es)?\b", re.I),
+     "Watches", ["wrist watch", "watch"], "Watches & Jewellery/Watches"),
+    (re.compile(r"\bwallets?\b", re.I),
+     "Wallet", ["wallet", "card holder"], "Bags & Luggage/Wallets"),
+    (re.compile(r"\b(handbags?|clutch(es)?)\b", re.I),
+     "Handbag", ["handbag", "clutch"], "Bags & Luggage/Handbags & Clutches"),
+)
+
+
+def _add_named_items(buckets: list[Bucket], query: str) -> list[Bucket]:
+    """Append a group for each item the shopper named that no group covers."""
+    covered = {path for b in buckets for path in b.catalogue_paths}
+    added = list(buckets)
+    for pattern, name, phrases, path in _NAMED_SHELVES:
+        if path in covered or not pattern.search(query):
+            continue
+        added.append(Bucket(
+            name=name,
+            search_phrases=phrases,
+            why_needed=f"You asked for {name.lower()}.",
+            role="required",
+            catalogue_paths=[path],
+        ))
+    return added
+
+
+# Things the catalogue does not stock, with the shelves that come closest.
+# Said in the gap note only: the group stays empty rather than being filled
+# with a near neighbour the shopper did not ask for.
+_NO_STOCK_NEAREST: tuple[tuple[re.Pattern[str], str, str], ...] = (
+    (re.compile(r"\b(heels?|pumps|stilettos?|wedges?)\b", re.I),
+     "heels", "Flats and Ethnic Footwear"),
+)
+
+
+def _no_stock_reason(bucket: Bucket) -> str:
+    text = " ".join([bucket.name, *bucket.search_phrases])
+    for pattern, item, nearest in _NO_STOCK_NEAREST:
+        if pattern.search(text):
+            return f"this catalogue doesn't stock {item}; the nearest shelves are {nearest}"
+    return "this catalogue doesn't stock that type of product yet"
+
 
 _ABOUT_THE_REQUEST = re.compile(
     r"\b(the user|the shopper|the customer|the request|too generic|too vague)\b", re.I
@@ -613,6 +665,11 @@ def recommend_events(
     # plan offered lehengas and sarees, and "For · unspecified (you)".
     if filters.gender and not wearer_implied(payload.query):
         structured = structured.model_copy(update={"filters": filters.model_copy(update={"gender": None})})
+    # And the reverse: a wearer the words settle is applied when the model
+    # left it unset, so the search stays on that wearer's shelves.
+    if not structured.filters.gender and (said := implied_gender(payload.query)):
+        structured = structured.model_copy(
+            update={"filters": structured.filters.model_copy(update={"gender": said})})
 
     # Shelves the request doesn't call for come out of the plan; a group left
     # with none was never asked for, so it goes too, rather than being
@@ -641,6 +698,7 @@ def recommend_events(
         if paths != bucket.catalogue_paths:
             bucket = bucket.model_copy(update={"catalogue_paths": paths})
         buckets.append(bucket)
+    buckets = _add_named_items(buckets, payload.query)
     if buckets != structured.buckets:
         structured = structured.model_copy(update={"buckets": buckets})
 
@@ -813,7 +871,7 @@ def recommend_events(
         if bucket.name in shown:
             continue
         if not bucket.catalogue_paths:
-            reason = "this catalogue doesn't stock that type of product yet"
+            reason = _no_stock_reason(bucket)
         elif not any(path in ALL_PATHS for path in bucket.catalogue_paths):
             # A planning error, not a stock gap: the shelves named do not exist.
             reason = "couldn't match this to a section of the catalogue"

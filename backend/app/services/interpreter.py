@@ -457,11 +457,32 @@ def _path_key(path: str) -> str:
 _CANONICAL_PATHS = {_path_key(p): p for p in [*ALL_PATHS, *PRODUCT_TAXONOMY]}
 
 
+def _unique_shelves() -> dict[str, str]:
+    """Shelf name -> full path, for shelf names only one category holds."""
+    seen: dict[str, list[str]] = {}
+    for full in ALL_PATHS:
+        seen.setdefault(_path_key(full.split("/", 1)[-1]), []).append(full)
+    return {name: paths[0] for name, paths in seen.items() if len(paths) == 1}
+
+
+_SHELF_BY_NAME = _unique_shelves()
+
+
 def _canonical_path(path: str) -> str:
     """The catalogue's exact spelling of a path, or the input unchanged when it
     names nothing in the catalogue (retrieval then reports the slot as
-    unmapped rather than silently matching something else)."""
+    unmapped rather than silently matching something else).
+
+    A model that files a real shelf under the wrong category ("Women's
+    Apparel/Sarees", which lives under Ethnic Wear) is repaired when the shelf
+    name is unique to one category. Live, that one slip emptied a saree group
+    that the catalogue could fill.
+    """
     found = _CANONICAL_PATHS.get(_path_key(path))
+    if found is None and "/" in path:
+        found = _SHELF_BY_NAME.get(_path_key(path.rsplit("/", 1)[-1]))
+        if found is not None:
+            logger.info("Moved shelf %r to %r", path, found)
     if found is None:
         logger.warning("Model named a shelf that is not in the catalogue: %r", path)
     return found or path

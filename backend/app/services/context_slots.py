@@ -239,6 +239,33 @@ def wearer_implied(text: str) -> bool:
     )
 
 
+_FEMALE_WORDS = re.compile(
+    r"\b(sister|wife|mom|mother|mum|girlfriend|daughter|niece|grandmother|grandma|aunt|girl"
+    r"|woman|women|womens|ladies|lady|didi|behen|bahen|maa|mummy|beti|chachi|mami|nani|dadi|patni"
+    r"|sarees?|saris?|lehengas?|kurtis?|salwar|dupattas?|blouses?|dress|dresses|skirts?"
+    r"|heels|handbags?|clutch(es)?)s?\b"
+)
+_MALE_WORDS = re.compile(
+    r"\b(brother|husband|dad|father|son|boyfriend|nephew|grandfather|grandpa|uncle|boy|man|men"
+    r"|mens|gents|guy|bhai|bhaiya|papa|beta|chacha|mama|nana|dada|pati|sherwanis?|dhotis?|beard)s?\b"
+)
+
+
+def implied_gender(text: str) -> str | None:
+    """"men" or "women" when the shopper's words settle who it is for, else None.
+
+    The model often leaves the wearer unset even for "my sister's wedding", and
+    an unset wearer searches both shelves. Live, that request returned men's
+    mojaris, a bolo tie and a rosary ring beside the sarees. Words for both
+    genders ("for my mom and dad") settle nothing.
+    """
+    lowered = text.lower()
+    female, male = bool(_FEMALE_WORDS.search(lowered)), bool(_MALE_WORDS.search(lowered))
+    if female == male:
+        return None
+    return "women" if female else "men"
+
+
 # Shelves only some requests call for. Live, qwen3:8b planned headlamps and
 # navigation gear for "Europe in December" and kurta sets for a Goa beach
 # holiday, copying a trek-shaped plan onto every trip.
